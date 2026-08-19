@@ -1,0 +1,21 @@
+# Build output
+native/speccy_core/linux/out/
+build/
+.gradle/
+.idea/
+local.properties
+
+# Flutter
+flutter_app/build/
+flutter_app/.dart_tool/
+.packages
+
+# Never commit ROMs or games -- they are the user's.
+*.rom
+*.tap
+*.tzx
+*.z80
+*.sna
+*.szx
+*.trd
+*.scl
