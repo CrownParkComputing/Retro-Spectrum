@@ -15,12 +15,24 @@ import 'package:retro_spectrum/ffi/speccy_core.dart';
 class FramebufferView extends StatefulWidget {
   final SpeccyCore core;
   final Duration pollInterval;
+  /// Draws the PANEL's redraw rate over the picture.
+  ///
+  /// Not the core's frame rate: it counts how often this widget pulled and
+  /// decoded a framebuffer, which [pollInterval] bounds. The status bar
+  /// reports the core's own figure, so showing both puts two numbers
+  /// labelled FPS on screen disagreeing with each other -- off by default
+  /// for that reason.
   final bool showFps;
 
   const FramebufferView({
     super.key,
     required this.core,
-    this.pollInterval = const Duration(milliseconds: 33),
+    // ~60Hz, comfortably above the 50 frames a second a PAL Spectrum
+    // produces. At 33ms this timer could tick only 30 times a second, so
+    // the panel showed roughly three of every five frames however fast the
+    // core ran -- and its own counter read ~30 by construction, which is
+    // not a measurement, it is the interval.
+    this.pollInterval = const Duration(milliseconds: 16),
     this.showFps = false,
   });
 

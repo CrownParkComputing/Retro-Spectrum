@@ -109,7 +109,10 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
   Widget build(BuildContext context) {
     final showPad = widget.showPadOverlay;
     return Stack(children: [
-      FramebufferView(core: widget.core, showFps: true),
+      // No FPS overlay: the status bar already reports the core's rate, and
+      // this widget's counter measures its own redraws -- a different number
+      // under the same name, drawn over the corner of the picture.
+      FramebufferView(core: widget.core),
       if (showPad) SpectrumKeyboard(core: widget.core),
     ]);
   }
