@@ -1,11 +1,10 @@
-// setup_wizard_screen.dart — Auto-scans the default Saturn folder
+// setup_wizard_screen.dart — Auto-scans the default Spectrum folder
 // for BIOS + game files. Like ViceMultiplatform's wizard: one screen,
 // what was found is listed, user can pick a different folder or finish.
 // Compact: no big headings, tight padding.
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:retro_spectrum/data/media_entry.dart';
 import 'package:retro_spectrum/services/app_prefs.dart';
 import 'package:retro_spectrum/services/setup_scan_service.dart';
 

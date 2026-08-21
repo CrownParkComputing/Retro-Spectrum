@@ -22,6 +22,7 @@ dependencies:
   http: ^1.6.0
   archive: ^4.0.9
 
+  crypto: any
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -32,4 +33,8 @@ flutter:
   assets:
     - assets/icons/
     - assets/bezels/
-    - assets/bios/
+    # The Spectrum ROMs and the 4x8 font, pushed into the core as buffers
+    # at startup via speccy_core_set_rom / _set_font. Freely distributable,
+    # and the Android build has no other way to get them: it is compiled
+    # -DUSE_EXTERN_RESOURCES, so the core never reads them off disk.
+    - assets/roms/

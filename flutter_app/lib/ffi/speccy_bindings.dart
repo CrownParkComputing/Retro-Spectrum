@@ -49,11 +49,7 @@ class SpeccyErr {
 //  Native typedefs (mirrored from speccy_bridge.h)
 // ============================================================
 
-typedef _H = ffi.Pointer<ffi.Uint8>; // opaque SpeccyCore*
 typedef _C = ffi.Pointer<Utf8>; // const char* (C string)
-
-typedef _CreateNative = ffi.Pointer<ffi.Uint8> Function();
-typedef _CreateDart = ffi.Pointer<ffi.Uint8> Function();
 
 typedef _VoidHandleNative = ffi.Void Function();
 typedef _VoidHandleDart = void Function();
@@ -61,17 +57,8 @@ typedef _VoidHandleDart = void Function();
 typedef _IntHandleStrNative = ffi.Int32 Function(_C);
 typedef _IntHandleStrDart = int Function(ffi.Pointer<Utf8>);
 
-typedef _IntHandleStrIntNative = ffi.Int32 Function(_C, ffi.Int32);
-typedef _IntHandleStrIntDart = int Function(ffi.Pointer<Utf8>, int);
-
-typedef _IntHandleIntNative = ffi.Int32 Function(ffi.Int32);
-typedef _IntHandleIntDart = int Function(int);
-
 typedef _VoidHandleIntIntNative = ffi.Void Function(ffi.Int32, ffi.Int32);
 typedef _VoidHandleIntIntDart = void Function(int, int);
-
-typedef _IntHandleIntIntNative = ffi.Int32 Function(ffi.Int32, ffi.Int32);
-typedef _IntHandleIntIntDart = int Function(int, int);
 
 typedef _IntHandleNative = ffi.Int32 Function();
 typedef _IntHandleDart = int Function();
@@ -79,17 +66,11 @@ typedef _IntHandleDart = int Function();
 typedef _VoidHandleIntNative = ffi.Void Function(ffi.Int32);
 typedef _VoidHandleIntDart = void Function(int);
 
-typedef _VoidHandleStrIntNative = ffi.Void Function(ffi.Int32, _C);
-typedef _VoidHandleStrIntDart = void Function(int, ffi.Pointer<Utf8>);
-
 typedef _VoidStrIntNative = ffi.Void Function(_C, ffi.Int32);
 typedef _VoidStrIntDart = void Function(ffi.Pointer<Utf8>, int);
 
 typedef _IntStrIntNative = ffi.Int32 Function(_C, ffi.Int32);
 typedef _IntStrIntDart = int Function(ffi.Pointer<Utf8>, int);
-
-typedef _VoidHandleStrNative = ffi.Void Function(_C);
-typedef _VoidHandleStrDart = void Function(ffi.Pointer<Utf8>);
 
 typedef _VoidHandleStrStrNative = ffi.Void Function(_C, _C);
 typedef _VoidHandleStrStrDart = void Function(ffi.Pointer<Utf8>, ffi.Pointer<Utf8>);
@@ -209,24 +190,7 @@ class SpeccyCoreBindings {
   //  Public Dart wrappers
   // ============================================================
 
-  ffi.Pointer<ffi.Uint8> create() {
-    // The bridge has no create/destroy and no handle: speccy_bridge.h owns
-    // a singleton, and every entry point there takes no handle at all.
-    //
-    // This sentinel exists purely so the adapter keeps the shape the rest of
-    // the app expects. It is NOT passed to native code, and passing it was
-    // the bug: every call handed address 0x1 to a function whose first
-    // parameter is something else entirely, so speccy_core_init read its
-    // profile_dir from address 1 and the app died on launch with
-    // "SIGSEGV, fault addr 0x1" before it drew a frame.
-    return ffi.Pointer<ffi.Uint8>.fromAddress(1);
-  }
-
-  void destroy(ffi.Pointer<ffi.Uint8> p) {
-    stop(p);
-  }
-
-  void init(ffi.Pointer<ffi.Uint8> p, String profileDir, String resourceDir) {
+  void init(String profileDir, String resourceDir) {
     final p1 = profileDir.toNativeUtf8();
     final p2 = resourceDir.toNativeUtf8();
     try {
@@ -237,36 +201,36 @@ class SpeccyCoreBindings {
     }
   }
 
-  void setRom(ffi.Pointer<ffi.Uint8> p, SpeccyRom rom,
+  void setRom(SpeccyRom rom,
       ffi.Pointer<ffi.Uint8> data, int size) {
     _setRom(rom.value, data, size);
   }
 
-  void setFont(ffi.Pointer<ffi.Uint8> p, ffi.Pointer<ffi.Uint8> data, int size) {
+  void setFont(ffi.Pointer<ffi.Uint8> data, int size) {
     _setFont(data, size);
   }
 
-  int start(ffi.Pointer<ffi.Uint8> p) => _start();
+  int start() => _start();
 
-  void stop(ffi.Pointer<ffi.Uint8> p) => _stop();
+  void stop() => _stop();
 
-  bool isRunning(ffi.Pointer<ffi.Uint8> p) => _isRunning() != 0;
+  bool isRunning() => _isRunning() != 0;
 
-  String? runFrame(ffi.Pointer<ffi.Uint8> p) {
+  String? runFrame() {
     final ptr = _runFrame();
     if (ptr == nullptr) return null;
     return ptr.toDartString();
   }
 
-  void setPaused(ffi.Pointer<ffi.Uint8> p, bool paused) =>
+  void setPaused(bool paused) =>
       _setPaused(paused ? 1 : 0);
 
-  void reset(ffi.Pointer<ffi.Uint8> p) => _reset();
+  void reset() => _reset();
 
   /// Returns the current framebuffer (RGBA8888) and its size. The
   /// Uint8List is a copy — the underlying pointer is only valid until
   /// the next frame completes.
-  FrameSnapshot? getFramebuffer(ffi.Pointer<ffi.Uint8> p) {
+  FrameSnapshot? getFramebuffer() {
     final wPtr = calloc<ffi.Int32>();
     final hPtr = calloc<ffi.Int32>();
     try {
@@ -283,21 +247,21 @@ class SpeccyCoreBindings {
     }
   }
 
-  int getFrameCounter(ffi.Pointer<ffi.Uint8> p) => _getFrameCounter();
+  int getFrameCounter() => _getFrameCounter();
 
-  int drainAudio(ffi.Pointer<ffi.Uint8> p, ffi.Pointer<ffi.Uint8> dst, int maxBytes) =>
+  int drainAudio(ffi.Pointer<ffi.Uint8> dst, int maxBytes) =>
       _drainAudio(dst, maxBytes);
 
-  void setSampleRate(ffi.Pointer<ffi.Uint8> p, int rate) => _setSampleRate(rate);
+  void setSampleRate(int rate) => _setSampleRate(rate);
 
-  int getAudioLevel(ffi.Pointer<ffi.Uint8> p) => _getAudioLevel();
+  int getAudioLevel() => _getAudioLevel();
 
-  void keyEvent(ffi.Pointer<ffi.Uint8> p, int key, int flags) =>
+  void keyEvent(int key, int flags) =>
       _keyEvent(key, flags);
 
-  void kempston(ffi.Pointer<ffi.Uint8> p, int mask) => _kempston(mask);
+  void kempston(int mask) => _kempston(mask);
 
-  bool fileTypeSupported(ffi.Pointer<ffi.Uint8> p, String name) {
+  bool fileTypeSupported(String name) {
     final n = name.toNativeUtf8();
     try {
       return _fileTypeSupported(n) != 0;
@@ -306,7 +270,7 @@ class SpeccyCoreBindings {
     }
   }
 
-  int openFile(ffi.Pointer<ffi.Uint8> p, String path) {
+  int openFile(String path) {
     final n = path.toNativeUtf8();
     try {
       return _openFile(n);
@@ -315,7 +279,7 @@ class SpeccyCoreBindings {
     }
   }
 
-  int openData(ffi.Pointer<ffi.Uint8> p, String name, ffi.Pointer<ffi.Uint8> data,
+  int openData(String name, ffi.Pointer<ffi.Uint8> data,
       int size) {
     final n = name.toNativeUtf8();
     try {
@@ -325,7 +289,7 @@ class SpeccyCoreBindings {
     }
   }
 
-  int saveFile(ffi.Pointer<ffi.Uint8> p, String path) {
+  int saveFile(String path) {
     final n = path.toNativeUtf8();
     try {
       return _saveFile(n);
@@ -334,13 +298,13 @@ class SpeccyCoreBindings {
     }
   }
 
-  int tapeState(ffi.Pointer<ffi.Uint8> p) => _tapeState();
+  int tapeState() => _tapeState();
 
-  void tapeToggle(ffi.Pointer<ffi.Uint8> p) => _tapeToggle();
+  void tapeToggle() => _tapeToggle();
 
-  bool diskChanged(ffi.Pointer<ffi.Uint8> p) => _diskChanged() != 0;
+  bool diskChanged() => _diskChanged() != 0;
 
-  int saveState(ffi.Pointer<ffi.Uint8> p, String path) {
+  int saveState(String path) {
     final n = path.toNativeUtf8();
     try {
       return _saveState(n);
@@ -349,7 +313,7 @@ class SpeccyCoreBindings {
     }
   }
 
-  int loadState(ffi.Pointer<ffi.Uint8> p, String path) {
+  int loadState(String path) {
     final n = path.toNativeUtf8();
     try {
       return _loadState(n);
@@ -394,10 +358,10 @@ class SpeccyCoreBindings {
     }
   }
 
-  void storeOptions(ffi.Pointer<ffi.Uint8> p) => _storeOptions();
+  void storeOptions() => _storeOptions();
 
   /// FPS scaled by 100 (i.e. 5000 == 50.00 fps).
-  int getFpsX100(ffi.Pointer<ffi.Uint8> p) => _getFpsX100();
+  int getFpsX100() => _getFpsX100();
 }
 
 /// A snapshot of the emulator's current framebuffer.

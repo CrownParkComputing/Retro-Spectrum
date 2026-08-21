@@ -1,4 +1,10 @@
-// paths_settings_screen.dart — Edit the Saturn BIOS path + games folder
+// paths_settings_screen.dart — Edit the games folder.
+//
+// No BIOS picker, unlike the Saturn sibling this screen was copied from.
+// The Spectrum ROMs are freely distributable and ship in assets/roms/,
+// pushed into the core at startup by RomLoader -- there is nothing for the
+// user to find, so offering a picker would be asking for a file that is
+// already there.
 // + trigger an auto-scan + re-run the guided setup. Mirrors
 // ViceMultiplatform's paths_settings_screen.dart pattern. The "Re-run
 // setup" entry used to live in the sidebar footer; it is now here so
@@ -72,7 +78,7 @@ class _PathsSettingsScreenState extends State<PathsSettingsScreen> {
       backgroundColor: const Color(0xFF050607),
       appBar: AppBar(title: const Text('📂 Paths')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        _section('Saturn BIOS'),
+        _section('Spectrum ROMs'),
         ListTile(
           leading: const Icon(Icons.memory),
           title: Text(_biosPath.isEmpty ? '(unset)' : _biosPath.split('/').last,
@@ -109,7 +115,7 @@ class _PathsSettingsScreenState extends State<PathsSettingsScreen> {
             leading: const Icon(Icons.replay),
             title: const Text('Re-run setup wizard'),
             subtitle: const Text(
-                'Re-pick the BIOS, games folder and core setup from scratch. '
+                'Re-pick the games folder and core setup from scratch. '
                 'Useful after switching devices or restoring an Android backup.',
                 style: TextStyle(fontSize: 11, color: Colors.white54)),
             trailing: const Icon(Icons.chevron_right),

@@ -18,7 +18,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/data/category.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/data/peripheral_type.dart';
 import 'package:retro_spectrum/ffi/speccy_core.dart';
 import 'package:retro_spectrum/screens/about_screen.dart';
 import 'package:retro_spectrum/screens/audio_settings_screen.dart';
@@ -30,7 +29,6 @@ import 'package:retro_spectrum/screens/paths_settings_screen.dart';
 import 'package:retro_spectrum/services/app_prefs.dart';
 import 'package:retro_spectrum/services/core_paths.dart';
 import 'package:retro_spectrum/theme/spectrum_theme.dart';
-import 'package:retro_spectrum/widgets/peripheral_selector.dart';
 import 'package:retro_spectrum/widgets/sidebar.dart';
 import 'package:retro_spectrum/widgets/sidebar_style.dart';
 
@@ -48,7 +46,6 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   WorkbenchCategory _category = WorkbenchCategory.games;
   String _biosPath = '';
   String _gamesFolder = '';
-  bool _pathsLoaded = false;
 
   /// The game the user tapped to launch. Held so the in-panel EmulatorScreen
   /// can call `loadDisc(entry.path)` -- the disc never loads if this is null
@@ -108,7 +105,6 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     setState(() {
       _biosPath = b;
       _gamesFolder = g;
-      _pathsLoaded = true;
     });
   }
 
@@ -480,9 +476,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         child: ListView(padding: const EdgeInsets.all(16), children: [
           Text('Settings', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 16),
-          PeripheralSelector(core: widget.core, port: 1),
           const SizedBox(height: 12),
-          PeripheralSelector(core: widget.core, port: 2),
           const SizedBox(height: 16),
           Text('Bridge status', style: Theme.of(context).textTheme.titleSmall),
           Text('FPS: ${(widget.core.fpsX100 / 100).toStringAsFixed(2)}'),

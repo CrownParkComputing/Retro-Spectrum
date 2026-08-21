@@ -1,64 +1,69 @@
-// media_entry.dart — One scanned Saturn game on disk.
+// media_entry.dart — One scanned Spectrum title on disk.
 //
-// Saturn has exactly one disc format in practice (the Ymir core accepts
-// CHD / CUE / MDS / CCD / ISO), so the format filter is a flat enum
-// rather than a hierarchy. The interesting per-title metadata is the
-// normalized bezel key -- the library scanner derives it once at scan
-// time and both the library tile and the bezel index share it later.
+// The Spectrum has no single medium: a title arrives as a tape (.tap,
+// .tzx), a snapshot (.z80, .sna), a disk (.trd, .scl), or any of those
+// inside a .zip. The core sorts that out itself -- speccy_core_open_file
+// dispatches on content, and file_type.cpp is where the list really
+// lives -- so this enum exists to label and filter, not to decide.
 
-/// The disc-image kinds the Ymir core can mount. `unknown` is what any
-/// extension we don't recognise yields; we filter those out in the
-/// scanner, but the value still exists so a stray entry can be displayed
-/// (with a "UNSUPPORTED" badge) rather than crashing the grid.
+/// The file kinds the Speccy core can open. `unknown` is what any
+/// extension we don't recognise yields; the scanner filters those out,
+/// but the value still exists so a stray entry can be displayed (with a
+/// "?" badge) rather than crashing the grid.
 enum MediaFormat {
   unknown,
-  chd,
-  cue,
-  mds,
-  ccd,
-  iso;
+  tap,
+  tzx,
+  z80,
+  sna,
+  trd,
+  scl,
+  zip;
 
   /// Short label for the corner badge (upper-cased extension).
-  String get extensionLabel {
-    switch (this) {
-      case MediaFormat.chd:
-        return 'CHD';
-      case MediaFormat.cue:
-        return 'CUE';
-      case MediaFormat.mds:
-        return 'MDS';
-      case MediaFormat.ccd:
-        return 'CCD';
-      case MediaFormat.iso:
-        return 'ISO';
-      case MediaFormat.unknown:
-        return '?';
-    }
-  }
+  String get extensionLabel => switch (this) {
+        MediaFormat.tap => 'TAP',
+        MediaFormat.tzx => 'TZX',
+        MediaFormat.z80 => 'Z80',
+        MediaFormat.sna => 'SNA',
+        MediaFormat.trd => 'TRD',
+        MediaFormat.scl => 'SCL',
+        MediaFormat.zip => 'ZIP',
+        MediaFormat.unknown => '?',
+      };
 
-  /// True for the formats the core can actually mount.
-  bool get isSupported =>
-      this == MediaFormat.chd ||
-      this == MediaFormat.cue ||
-      this == MediaFormat.mds ||
-      this == MediaFormat.ccd ||
-      this == MediaFormat.iso;
+  /// What sort of medium this is, for the tile's second line. A tape has
+  /// to be played and a snapshot does not, which is the difference a
+  /// player actually cares about.
+  String get mediumLabel => switch (this) {
+        MediaFormat.tap || MediaFormat.tzx => 'Tape',
+        MediaFormat.z80 || MediaFormat.sna => 'Snapshot',
+        MediaFormat.trd || MediaFormat.scl => 'Disk',
+        MediaFormat.zip => 'Archive',
+        MediaFormat.unknown => 'Unsupported',
+      };
 
-  /// Map a filename extension to a [MediaFormat]. The matching is
-  /// case-insensitive and ignores a leading dot, so `.cue` and `CUE`
-  /// both resolve.
+  /// True for the formats the core can actually open.
+  bool get isSupported => this != MediaFormat.unknown;
+
+  /// Map a filename extension to a [MediaFormat]. Case-insensitive and
+  /// ignores a leading dot, so `.tap` and `TAP` both resolve.
   static MediaFormat fromExtension(String ext) {
-    switch (ext.toLowerCase()) {
-      case 'chd':
-        return MediaFormat.chd;
-      case 'cue':
-        return MediaFormat.cue;
-      case 'mds':
-        return MediaFormat.mds;
-      case 'ccd':
-        return MediaFormat.ccd;
-      case 'iso':
-        return MediaFormat.iso;
+    switch (ext.toLowerCase().replaceFirst('.', '')) {
+      case 'tap':
+        return MediaFormat.tap;
+      case 'tzx':
+        return MediaFormat.tzx;
+      case 'z80':
+        return MediaFormat.z80;
+      case 'sna':
+        return MediaFormat.sna;
+      case 'trd':
+        return MediaFormat.trd;
+      case 'scl':
+        return MediaFormat.scl;
+      case 'zip':
+        return MediaFormat.zip;
       default:
         return MediaFormat.unknown;
     }
@@ -69,10 +74,10 @@ enum MediaFormat {
 /// bezel index both key off [path] + [bezelKey], neither of which changes
 /// once the entry has been scanned.
 class MediaEntry {
-  /// The filename as the user sees it (e.g. `"Panzer Dragoon (USA).cue"`).
+  /// The filename as the user sees it (e.g. `"Manic Miner.tap"`).
   final String displayName;
 
-  /// Absolute path on the device -- what the core's loadDisc() wants.
+  /// Absolute path on the device -- what speccy_core_open_file wants.
   final String path;
 
   /// Format derived from the filename extension.
@@ -101,7 +106,7 @@ class MediaEntry {
   String get extensionLabel => format.extensionLabel;
 
   /// Two entries are the same game if they share path + format (covers
-  /// the case where the user has the same disc under different parent
+  /// the case where the user has the same title under different parent
   /// folders -- the scanner dedupes against this).
   @override
   bool operator ==(Object other) =>

@@ -14,15 +14,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/ffi/speccy_bindings.dart';
 import 'package:retro_spectrum/ffi/speccy_core.dart';
 import 'package:retro_spectrum/services/app_log.dart';
-import 'package:retro_spectrum/services/backup_ram_service.dart';
+import 'package:retro_spectrum/services/game_state_service.dart';
 import 'package:retro_spectrum/services/gamepad_service.dart';
 import 'package:retro_spectrum/services/core_paths.dart';
 import 'package:retro_spectrum/widgets/framebuffer_view.dart';
-import 'package:retro_spectrum/widgets/saturn_pad_overlay.dart';
-import 'package:retro_spectrum/widgets/virtua_gun_overlay.dart';
+import 'package:retro_spectrum/widgets/spectrum_keyboard.dart';
 
 class EmulatorScreen extends StatefulWidget {
   final SpeccyCore core;
@@ -53,7 +51,6 @@ class EmulatorScreen extends StatefulWidget {
 
 class _EmulatorScreenState extends State<EmulatorScreen> {
   GamepadService? _gamepad;
-  String _lastResult = 'starting…';
   String _currentDisc = '';
 
   @override
@@ -65,16 +62,15 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
 
   @override
   void dispose() {
-    // Persist NVRAM + SMPC state on exit. Errors are swallowed — if
-    // the path is gone (app uninstalled mid-launch) or the NVRAM is
-    // empty (user erased it via the BIOS), we don't want dispose()
-    // itself to crash.
+    // Snapshot on the way out. Errors are swallowed: if the path is gone
+    // (app uninstalled mid-launch) there is nothing to do about it here,
+    // and dispose() crashing is worse than a lost auto-save.
     if (_currentDisc.isNotEmpty) {
       try {
-        BackupRamService.saveFrom(widget.core, _currentDisc);
+        GameStateService.saveFrom(widget.core, _currentDisc);
       } catch (_) {}
     }
-    BackupRamService.stopAutoSave();
+    GameStateService.stopAutoSave();
     try {
       try {
         widget.core.saveState(CorePaths.saveStatePath);
@@ -89,26 +85,23 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
 
     if (entry != null && File(entry.path).existsSync()) {
       _currentDisc = entry.path;
-      setState(() => _lastResult = 'loading tape/image…');
       AppLog.log('openFile: ${entry.path}');
       final rc = widget.core.openFile(entry.path);
       AppLog.log('openFile rc=$rc');
-      setState(() => _lastResult = 'openFile rc=$rc (${entry.displayName})');
 
       // Restore the per-game snapshot (Spectrum snapshot is .sna).
       try {
-        final loaded = await BackupRamService.loadInto(widget.core, entry.path);
+        final loaded = await GameStateService.loadInto(widget.core, entry.path);
         AppLog.log('snapshot load: $loaded (${entry.displayName})');
         debugPrint('snapshot load: $loaded');
       } catch (e) {
         AppLog.log('snapshot load exception: $e');
       }
 
-      BackupRamService.startAutoSave(widget.core, entry.path);
+      GameStateService.startAutoSave(widget.core, entry.path);
       AppLog.log('snapshot auto-save started (60s interval)');
     }
 
-    setState(() => _lastResult = 'running');
     AppLog.log('emulator running @ ${widget.core.fpsX100 / 100.0}fps');
   }
 
@@ -117,7 +110,7 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
     final showPad = widget.showPadOverlay;
     return Stack(children: [
       FramebufferView(core: widget.core, showFps: true),
-      if (showPad) SaturnPadOverlay(core: widget.core),
+      if (showPad) SpectrumKeyboard(core: widget.core),
     ]);
   }
 }

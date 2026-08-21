@@ -3,7 +3,6 @@
 // `speccy_core.dart` so screens never touch `dart:ffi` directly.
 
 import 'dart:ffi';
-import 'dart:ffi' as ffi;
 
 import 'speccy_bindings.dart';
 
@@ -11,8 +10,6 @@ import 'speccy_bindings.dart';
 /// Tests provide a `FakeSpeccyCore`; production uses
 /// `SpeccyCoreBindingsAdapter`.
 abstract class SpeccyCore {
-  /// Native handle (opaque). Non-null after [init] succeeds.
-  Pointer<Uint8>? get handle;
 
   /// Lifecycle.
   void init(String profileDir, String resourceDir);
@@ -70,117 +67,110 @@ abstract class SpeccyCore {
 /// Concrete production implementation backed by `dart:ffi`.
 class SpeccyCoreBindingsAdapter implements SpeccyCore {
   final SpeccyCoreBindings _bindings;
-  ffi.Pointer<ffi.Uint8>? _handle;
+
+  /// Whether init() has run. The bridge owns a singleton and hands back no
+  /// handle, so this is the only "is it up?" there is -- and the reason the
+  /// adapter used to invent one. See SpeccyCoreBindings.
+  bool _initialised = false;
 
   SpeccyCoreBindingsAdapter(this._bindings);
 
   @override
-  ffi.Pointer<ffi.Uint8>? get handle => _handle;
-
-  @override
   void init(String profileDir, String resourceDir) {
-    _handle ??= _bindings.create();
-    _bindings.init(_handle!, profileDir, resourceDir);
+    _bindings.init(profileDir, resourceDir);
+    _initialised = true;
   }
 
   @override
   void start() {
-    final p = _h();
-    _bindings.start(p);
+    if (!_initialised) {
+      throw StateError('SpeccyCore.init() was never called');
+    }
+    _bindings.start();
   }
 
   @override
   void stop() {
-    final p = _handle;
-    if (p != null) _bindings.stop(p);
+    if (_initialised) _bindings.stop();
   }
 
   @override
   void dispose() {
-    final p = _handle;
-    if (p != null) {
-      _bindings.destroy(p);
-      _handle = null;
-    }
-  }
-
-  ffi.Pointer<ffi.Uint8> _h() {
-    final p = _handle;
-    if (p == null) {
-      throw StateError('SpeccyCore.init() was never called');
-    }
-    return p;
+    // Nothing to free: speccy_bridge.h has no destroy, because there is no
+    // per-instance state to destroy. Stopping is the whole teardown.
+    stop();
+    _initialised = false;
   }
 
   @override
   void setRom(SpeccyRom rom, Pointer<Uint8> data, int size) =>
-      _bindings.setRom(_h(), rom, data, size);
+      _bindings.setRom(rom, data, size);
 
   @override
   void setFont(Pointer<Uint8> data, int size) =>
-      _bindings.setFont(_h(), data, size);
+      _bindings.setFont(data, size);
 
   @override
-  String? runFrame() => _bindings.runFrame(_h());
+  String? runFrame() => _bindings.runFrame();
 
   @override
-  void reset() => _bindings.reset(_h());
+  void reset() => _bindings.reset();
 
   @override
-  void setPaused(bool paused) => _bindings.setPaused(_h(), paused);
+  void setPaused(bool paused) => _bindings.setPaused(paused);
 
   @override
-  bool get isRunning => _bindings.isRunning(_h());
+  bool get isRunning => _bindings.isRunning();
 
   @override
-  FrameSnapshot? get framebuffer => _bindings.getFramebuffer(_h());
+  FrameSnapshot? get framebuffer => _bindings.getFramebuffer();
 
   @override
-  int get frameCounter => _bindings.getFrameCounter(_h());
+  int get frameCounter => _bindings.getFrameCounter();
 
   @override
   int drainAudio(Pointer<Uint8> dst, int maxBytes) =>
-      _bindings.drainAudio(_h(), dst, maxBytes);
+      _bindings.drainAudio(dst, maxBytes);
 
   @override
-  void setSampleRate(int rate) => _bindings.setSampleRate(_h(), rate);
+  void setSampleRate(int rate) => _bindings.setSampleRate(rate);
 
   @override
-  int get audioLevel => _bindings.getAudioLevel(_h());
+  int get audioLevel => _bindings.getAudioLevel();
 
   @override
-  void keyEvent(int key, int flags) => _bindings.keyEvent(_h(), key, flags);
+  void keyEvent(int key, int flags) => _bindings.keyEvent(key, flags);
 
   @override
-  void kempston(int mask) => _bindings.kempston(_h(), mask);
+  void kempston(int mask) => _bindings.kempston(mask);
 
   @override
-  bool fileTypeSupported(String name) => _bindings.fileTypeSupported(_h(), name);
+  bool fileTypeSupported(String name) => _bindings.fileTypeSupported(name);
 
   @override
-  int openFile(String path) => _bindings.openFile(_h(), path);
+  int openFile(String path) => _bindings.openFile(path);
 
   @override
   int openData(String name, Pointer<Uint8> data, int size) =>
-      _bindings.openData(_h(), name, data, size);
+      _bindings.openData(name, data, size);
 
   @override
-  int saveFile(String path) => _bindings.saveFile(_h(), path);
+  int saveFile(String path) => _bindings.saveFile(path);
 
   @override
-  int get tapeState => _bindings.tapeState(_h());
+  int get tapeState => _bindings.tapeState();
 
   @override
-  void tapeToggle() => _bindings.tapeToggle(_h());
+  void tapeToggle() => _bindings.tapeToggle();
 
   @override
-  bool get diskChanged => _bindings.diskChanged(_h());
+  bool get diskChanged => _bindings.diskChanged();
 
   @override
-  int saveState(String path) => _bindings.saveState(_h(), path);
+  int saveState(String path) => _bindings.saveState(path);
 
   @override
-  int loadState(String path) => _bindings.loadState(_h(), path);
+  int loadState(String path) => _bindings.loadState(path);
 
   @override
   int getOptionInt(String name, int fallback) =>
@@ -199,8 +189,8 @@ class SpeccyCoreBindingsAdapter implements SpeccyCore {
       _bindings.setOptionBool(name, value);
 
   @override
-  void storeOptions() => _bindings.storeOptions(_h());
+  void storeOptions() => _bindings.storeOptions();
 
   @override
-  int get fpsX100 => _bindings.getFpsX100(_h());
+  int get fpsX100 => _bindings.getFpsX100();
 }

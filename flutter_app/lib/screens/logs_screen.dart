@@ -1,5 +1,5 @@
 // logs_screen.dart — Tail of the AppLog file, with a "Clear" button.
-// Useful for debugging BIOS boot / disc load / NVRAM save crashes
+// Useful for debugging ROM boot / tape load / auto-save crashes
 // without needing adb logcat.
 
 import 'package:flutter/material.dart';

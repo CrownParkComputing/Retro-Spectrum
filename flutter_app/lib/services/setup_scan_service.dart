@@ -1,11 +1,15 @@
-// setup_scan_service.dart — Auto-scan a folder for Saturn BIOS + game
-// files. Like ViceMultiplatform's auto-import flow: walk the folder,
-// classify each file (BIOS: saturn*.bin / *.bin 512 KiB; game:
-// .chd / .cue / .iso / .mds / .ccd / .img), report what was found.
+// setup_scan_service.dart — Auto-scan a folder for Spectrum titles.
 //
-// On Android the most common layout is /storage/FEDD-B1FF/Ymir/{BIOS,
-// Games} (the previous ymir-android Java app's convention). On Linux
-// it's ~/Ymir/{BIOS,Games}. iOS is file-import only.
+// Walk the folder, keep whatever the core can open, report what was found.
+//
+// There is no ROM hunt here, unlike the Saturn sibling this was copied
+// from: that scanner looked for a 512 KiB BIOS blob, because a Saturn
+// cannot boot without one the user supplies. The Spectrum ROMs are freely
+// distributable and ship in assets/roms/, so there is nothing to find.
+//
+// On Android the most common layout is /storage/FEDD-B1FF/Spectrum/{BIOS,
+// Games} (the convention the other Retro-* front ends use). On Linux
+// it's ~/Spectrum/{GamesGames}. iOS is file-import only.
 
 import 'dart:io';
 
@@ -31,9 +35,9 @@ class ScanResult {
 class SetupScanService {
   /// Default folders to probe in priority order. First hit wins.
   static const _defaultFolders = <String>[
-    '/storage/FEDD-B1FF/Ymir',
-    '/storage/emulated/0/Ymir',
-    '/sdcard/Ymir',
+    '/storage/FEDD-B1FF/Spectrum',
+    '/storage/emulated/0/Spectrum',
+    '/sdcard/Spectrum',
   ];
 
   /// Get the default scan folder for the current platform.
@@ -46,13 +50,12 @@ class SetupScanService {
     }
     if (Platform.isLinux || Platform.isMacOS) {
       final home = Platform.environment['HOME'] ?? '/root';
-      return '$home/Ymir';
+      return '$home/Spectrum';
     }
     return null;
   }
 
   /// Probe a folder for BIOS + game files. BIOS candidates = saturn*.bin
-  /// or *.bin files with size exactly 524288 bytes (the IPL size).
   static Future<ScanResult> scan(String folderPath) async {
     final bios = <String>[];
     final games = <MediaEntry>[];
@@ -69,16 +72,11 @@ class SetupScanService {
       final name = entity.path.toLowerCase();
       final size = await entity.length();
 
-      // BIOS detection: saturn*.bin OR any .bin that's exactly 512 KiB
-      if (name.endsWith('.bin')) {
-        if (size == 524288) {
-          bios.add(entity.path);
-        }
-      }
-
-      // Game detection
+      // What counts as a title is MediaFormat's business, not a second
+      // list here -- the two drifting apart is how a format becomes
+      // launchable from the library but invisible to setup.
       final ext = name.split('.').last;
-      if (['chd', 'cue', 'iso', 'mds', 'ccd', 'img'].contains(ext)) {
+      if (MediaFormat.fromExtension(ext).isSupported) {
         if (size > 0) {
           games.add(MediaEntry(
             displayName: _displayName(entity.path),

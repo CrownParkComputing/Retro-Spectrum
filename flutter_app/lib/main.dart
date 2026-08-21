@@ -15,6 +15,7 @@ import 'package:retro_spectrum/screens/setup_wizard_screen.dart';
 import 'package:retro_spectrum/screens/workbench_screen.dart';
 import 'package:retro_spectrum/services/app_log.dart';
 import 'package:retro_spectrum/services/app_prefs.dart';
+import 'package:retro_spectrum/services/rom_loader.dart';
 import 'package:retro_spectrum/services/core_paths.dart';
 
 void main() async {
@@ -81,6 +82,10 @@ class _RetroSpectrumAppState extends State<RetroSpectrumApp>
         CorePaths.profileDir,
         CorePaths.resourceDir,
       );
+      // Between init and start, which is the window the bridge documents.
+      // Without this the engine boots with an empty ROM and never reaches a
+      // BASIC prompt -- a dead-looking emulator with nothing wrong with it.
+      await RomLoader.loadInto(core);
       core.start();
       if (!mounted) return;
       setState(() => _core = core);

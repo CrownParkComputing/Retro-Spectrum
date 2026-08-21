@@ -25,7 +25,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:gamepads/gamepads.dart';
-import 'package:retro_spectrum/data/saturn_buttons.dart';
+import 'package:retro_spectrum/data/spectrum_keys.dart';
 import 'package:retro_spectrum/ffi/speccy_core.dart';
 
 /// Flag values from xPlatform::eKeyFlags on the native side.

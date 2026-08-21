@@ -6,9 +6,8 @@
 // mapping.
 
 import 'package:flutter/material.dart';
-import 'package:retro_spectrum/data/saturn_buttons.dart';
+import 'package:retro_spectrum/data/spectrum_keys.dart';
 import 'package:retro_spectrum/ffi/speccy_core.dart';
-import 'package:retro_spectrum/widgets/peripheral_selector.dart';
 
 class InputSettingsScreen extends StatefulWidget {
   final SpeccyCore core;
@@ -33,9 +32,7 @@ class _InputSettingsScreenState extends State<InputSettingsScreen> {
                   color: Colors.white54,
                   fontWeight: FontWeight.bold)),
         ),
-        PeripheralSelector(core: widget.core, port: 1),
         const SizedBox(height: 12),
-        PeripheralSelector(core: widget.core, port: 2),
         const SizedBox(height: 24),
         const Padding(
           padding: EdgeInsets.only(bottom: 8),
@@ -52,11 +49,12 @@ class _InputSettingsScreenState extends State<InputSettingsScreen> {
               spacing: 6,
               runSpacing: 6,
               children: [
-                for (final entry in kSpectrumKeyDefaults.entries)
-                  Chip(
-                    label: Text(entry.key),
-                    backgroundColor: const Color(0xFF202028),
-                  ),
+                for (final row in kSpectrumLayout)
+                  for (final cap in row)
+                    Chip(
+                      label: Text(cap.label),
+                      backgroundColor: const Color(0xFF202028),
+                    ),
               ],
             ),
           ),
