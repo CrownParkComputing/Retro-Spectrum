@@ -20,6 +20,7 @@ import 'package:retro_spectrum/services/game_state_service.dart';
 import 'package:retro_spectrum/services/gamepad_service.dart';
 import 'package:retro_spectrum/services/core_paths.dart';
 import 'package:retro_spectrum/widgets/framebuffer_view.dart';
+import 'package:retro_spectrum/widgets/kempston_pad.dart';
 import 'package:retro_spectrum/widgets/spectrum_keyboard.dart';
 
 class EmulatorScreen extends StatefulWidget {
@@ -34,7 +35,8 @@ class EmulatorScreen extends StatefulWidget {
   /// same source of truth (the workbench), which is what the previous
   /// in-screen toolbar got wrong (toggle was here, overlay was never
   /// rendered).
-  final bool showPadOverlay;
+  final bool showKeyboard;
+  final bool showJoystick;
 
   const EmulatorScreen({
     super.key,
@@ -42,7 +44,8 @@ class EmulatorScreen extends StatefulWidget {
     this.biosPath,
     this.gamesFolder,
     this.entry,
-    this.showPadOverlay = false,
+    this.showKeyboard = false,
+    this.showJoystick = false,
   });
 
   @override
@@ -107,13 +110,28 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showPad = widget.showPadOverlay;
     return Stack(children: [
       // No FPS overlay: the status bar already reports the core's rate, and
       // this widget's counter measures its own redraws -- a different number
       // under the same name, drawn over the corner of the picture.
-      FramebufferView(core: widget.core),
-      if (showPad) SpectrumKeyboard(core: widget.core),
+      Positioned.fill(child: FramebufferView(core: widget.core)),
+
+      // The stick sits OVER the picture, because it has to be under a thumb
+      // and a Spectrum screen is 4:3 on a wide display -- there is room
+      // either side of the picture and none below it.
+      if (widget.showJoystick)
+        Positioned.fill(child: KempstonPad(core: widget.core)),
+
+      // The keyboard takes the foot of the view rather than floating: it is
+      // forty keys, it is being read, and a game that wants a keypress has
+      // usually just said so in text you also need to see.
+      if (widget.showKeyboard)
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SpectrumKeyboard(core: widget.core),
+        ),
     ]);
   }
 }

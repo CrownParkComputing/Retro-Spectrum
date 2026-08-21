@@ -60,7 +60,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   /// the toolbar in [_statusBar] (this screen's bottom row) and the
   /// EmulatorScreen's overlay render see the same source of truth. Reset
   /// when a session ends.
-  bool _padVisible = false;
+  bool _keyboardVisible = false;
+  bool _joystickVisible = false;
 
   /// Scaffold key so the in-game Settings button can open the drawer that
   /// lives on the workbench's Scaffold (EmulatorScreen no longer owns a
@@ -116,7 +117,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     if (!mounted) return;
     setState(() {
       _inEmulator = false;
-      _padVisible = false;
+      _keyboardVisible = false;
+      _joystickVisible = false;
       // Snapshot the title so the resume banner has something to label and
       // the resume handler can re-enter the emulator screen on top.
       _pausedSession = _currentEntry;
@@ -137,7 +139,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   void _onSessionExit() {
     setState(() {
       _inEmulator = false;
-      _padVisible = false;
+      _keyboardVisible = false;
+      _joystickVisible = false;
       _pausedSession = null;
       _currentEntry = null;
     });
@@ -383,7 +386,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           ]),
         ),
       ),
-      if (!core.getOptionBool('sound', true)) ...[
+      // volume, not sound: `sound` is an int option (beeper/ay/tape), so
+      // asking eOption<bool>::Find for it never matches and the icon was
+      // stuck on regardless of whether anything was muted. Index 0 of
+      // volume is literally named "mute".
+      if (core.getOptionInt('volume', 5) == 0) ...[
         const SizedBox(width: 4),
         const Icon(Icons.volume_off,
             size: 12, color: SpectrumColors.sidebarLabelIdle),
@@ -424,16 +431,33 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   /// would be covering game UI otherwise.
   List<Widget> _inGameToolbar() {
     return [
+      // Two toggles, not one. The Spectrum's keyboard and its joystick are
+      // different machines' worth of input -- a text adventure wants the
+      // forty keys and a shoot-em-up wants a stick and fire -- and a single
+      // button that showed "the pad" could only ever offer one of them.
       IconButton(
-        tooltip: _padVisible
-            ? 'Hide on-screen pad'
-            : 'Show on-screen pad',
+        tooltip: _keyboardVisible
+            ? 'Hide Spectrum keyboard'
+            : 'Show Spectrum keyboard',
         icon: Icon(
-          _padVisible ? Icons.gamepad : Icons.gamepad_outlined,
+          _keyboardVisible ? Icons.keyboard : Icons.keyboard_outlined,
           size: 18,
         ),
         color: SpectrumColors.sidebarLabelIdle,
-        onPressed: () => setState(() => _padVisible = !_padVisible),
+        onPressed: () => setState(() => _keyboardVisible = !_keyboardVisible),
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+      ),
+      const SizedBox(width: 6),
+      IconButton(
+        tooltip:
+            _joystickVisible ? 'Hide joystick' : 'Show joystick (Kempston)',
+        icon: Icon(
+          _joystickVisible ? Icons.gamepad : Icons.gamepad_outlined,
+          size: 18,
+        ),
+        color: SpectrumColors.sidebarLabelIdle,
+        onPressed: () => setState(() => _joystickVisible = !_joystickVisible),
         visualDensity: VisualDensity.compact,
         padding: EdgeInsets.zero,
       ),
@@ -537,7 +561,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         biosPath: _biosPath,
         gamesFolder: _gamesFolder,
         entry: _currentEntry,
-        showPadOverlay: _padVisible,
+        showKeyboard: _keyboardVisible,
+        showJoystick: _joystickVisible,
       ),
     );
   }
