@@ -30,8 +30,13 @@ class GameStateService {
     return File(p.join(savesDirSync, '$digest.bin'));
   }
 
-  /// Synchronous saves dir — must be awaited once at startup before any
-  /// loadInto/saveFrom call. Returns the path.
+  /// The saves directory, once [ensureInit] has resolved it.
+  ///
+  /// It stays synchronous because fileFor() is, and it throws rather than
+  /// guessing: a wrong directory here means save states written somewhere
+  /// they will never be found again. Every async entry point below calls
+  /// ensureInit() for itself, so reaching this un-initialised is a
+  /// programming error rather than something a user can cause.
   static String _savesDirSyncCached = '';
   static String get savesDirSync {
     if (_savesDirSyncCached.isNotEmpty) return _savesDirSyncCached;
@@ -40,7 +45,8 @@ class GameStateService {
         'GameStateService.ensureInit() must be awaited before fileFor()');
   }
 
-  /// Call once at app startup (e.g. main() before runApp).
+  /// Resolves the saves directory. Idempotent, and called by the entry
+  /// points that need it, so callers do not have to remember.
   static Future<void> ensureInit() async {
     if (_savesDirSyncCached.isNotEmpty) return;
     final base = await getApplicationSupportDirectory();
@@ -53,6 +59,11 @@ class GameStateService {
   /// Read the 32 KiB state for a game from disk and feed it to
   /// the emulator. Returns true if a save file existed and was loaded.
   static Future<bool> loadInto(SpeccyCore core, String titlePath) async {
+    // Initialise here rather than relying on a startup call that nobody
+    // made: this used to throw "ensureInit() must be awaited" on every
+    // single launch, so no state was ever restored and every auto-save
+    // silently went nowhere.
+    await ensureInit();
     final f = fileFor(titlePath);
     if (!f.existsSync()) return false;
     final tmp = File('${f.path}.load.tmp');
@@ -68,6 +79,7 @@ class GameStateService {
   /// Snapshot the emulator's current state to disk for the given game.
   /// Called when leaving the emulator or every N seconds while playing.
   static Future<void> saveFrom(SpeccyCore core, String titlePath) async {
+    await ensureInit();
     final f = fileFor(titlePath);
     final tmp = File('${f.path}.save.tmp');
     try {

@@ -16,7 +16,10 @@ import '../data/media_entry.dart';
 import '../services/library_scanner.dart';
 import '../widgets/media_card.dart';
 
-const _digits = '0-9';
+/// Shown as '#', the usual shorthand for "starts with a number". The tab
+/// is one character wide like every letter, which is what lets the whole
+/// index fit on screen at once.
+const _digits = '#';
 
 /// Letter tab labels. 0-9 first (file names starting with a digit are
 /// common — 1943.chd, etc.), then A-Z. 'All' shows everything.
@@ -126,32 +129,41 @@ class _LibraryGridState extends State<LibraryGrid> {
     return result;
   }
 
+  /// The A-Z index.
+  ///
+  /// Laid out to fit rather than scroll. It used to be a horizontal
+  /// ListView of chips carrying their counts, which on a real library --
+  /// 5578 titles, every letter present -- meant scrolling a strip to reach
+  /// anything past M, or giving up and typing. Twenty-eight single
+  /// characters fit across a handheld in landscape, so they wrap instead
+  /// and the whole alphabet is one tap away.
+  ///
+  /// Counts moved to the tooltip: they doubled the width of every tab to
+  /// tell you something you can see by tapping it.
   Widget _buildTabs() {
     final counts = _counts;
     final tabs = ['All', ..._sortTabs]
         .where((t) => counts[t] != null && counts[t]! > 0)
         .toList();
     return Container(
-      height: 36,
       decoration: BoxDecoration(
         color: const Color(0xFF0A0C12),
         border: Border(
           bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
         ),
       ),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      child: Wrap(
+        spacing: 3,
+        runSpacing: 3,
         children: [
-          for (final tab in tabs) ...[
+          for (final tab in tabs)
             _TabButton(
               label: tab,
               count: counts[tab] ?? 0,
               selected: tab == _filter,
               onTap: () => setState(() => _tab = tab),
             ),
-            const SizedBox(width: 4),
-          ],
         ],
       ),
     );
@@ -260,36 +272,38 @@ class _TabButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = selected ? Colors.white : const Color(0xFFB9C2CE);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected
-                ? const Color(0xFF3D8BFF)
-                : const Color(0xFF1A1F2C),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
+    // 'All' needs its word; a letter needs a square big enough for a thumb.
+    final wide = label.length > 1;
+    return Tooltip(
+      message: '$label — $count',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: wide ? 40 : 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
               color: selected
-                  ? const Color(0xFF3D8BFF)
-                  : const Color(0xFF2B3340),
+                  ? const Color(0xFF2B6FE0)
+                  : const Color(0xFF141820),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFF7FB2FF)
+                    : const Color(0xFF232936),
+              ),
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label,
-                  style: TextStyle(
-                      color: fg, fontSize: 11, fontWeight: FontWeight.w500)),
-              const SizedBox(width: 3),
-              Text('$count',
-                  style: const TextStyle(
-                      color: Color(0xFF6D7689), fontSize: 10)),
-            ],
+            child: Text(
+              label,
+              style: TextStyle(
+                color: fg,
+                fontSize: wide ? 10 : 12,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
           ),
         ),
       ),
