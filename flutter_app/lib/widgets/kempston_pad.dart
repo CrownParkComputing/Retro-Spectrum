@@ -14,7 +14,9 @@ import 'package:flutter/material.dart';
 
 import '../data/spectrum_keys.dart';
 import '../ffi/speccy_core.dart';
+import '../services/app_prefs.dart';
 import 'dpad_view.dart';
+import 'movable_control.dart';
 import 'wobble_joystick.dart';
 
 /// Which stick to draw. Stored per user; see AppPrefs.
@@ -25,10 +27,14 @@ class KempstonPad extends StatefulWidget {
     super.key,
     required this.core,
     this.style = JoystickStyle.wobble,
+    this.editing = false,
   });
 
   final SpeccyCore core;
   final JoystickStyle style;
+
+  /// Drag mode: the stick and fire button can be moved, and say so.
+  final bool editing;
 
   @override
   State<KempstonPad> createState() => _KempstonPadState();
@@ -36,6 +42,36 @@ class KempstonPad extends StatefulWidget {
 
 class _KempstonPadState extends State<KempstonPad> {
   int _mask = 0;
+
+  /// Where each control has been dragged to, as a fraction of the play
+  /// area. Empty means "never moved" -- see AppPrefs.getControlPositions.
+  Map<String, Offset> _positions = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPositions();
+  }
+
+  Future<void> _loadPositions() async {
+    final positions = await AppPrefs.getControlPositions();
+    if (!mounted) return;
+    setState(() => _positions = positions);
+  }
+
+  /// Bottom-left for the stick and bottom-right for fire: the corners a
+  /// thumb reaches without moving the hand holding the device.
+  static const _defaults = <String, Offset>{
+    kControlIdStick: Offset(0.16, 0.74),
+    kControlIdFire: Offset(0.86, 0.74),
+  };
+
+  Offset _fraction(String id) => _positions[id] ?? _defaults[id]!;
+
+  void _move(String id, Offset fraction) =>
+      setState(() => _positions = {..._positions, id: fraction});
+
+  void _commit(String id) => AppPrefs.setControlPosition(id, _fraction(id));
 
   /// The port takes one byte holding every bit at once, so directions and
   /// fire have to be merged here rather than sent as separate events --
@@ -64,22 +100,40 @@ class _KempstonPadState extends State<KempstonPad> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          switch (widget.style) {
-            JoystickStyle.wobble =>
-              WobbleJoystick(onDirections: _directions),
-            JoystickStyle.dpad => DpadView(onDirections: _directions),
-          },
-          const Spacer(),
-          _FireButton(
-            onChanged: (down) => _send(KempstonBit.fire, down),
-          ),
-        ],
-      ),
+    // LayoutBuilder, because the stored positions are fractions and can
+    // only become pixels once the play area has a size.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final area = constraints.biggest;
+        return Stack(
+          children: [
+            MovableControl(
+              area: area,
+              fraction: _fraction(kControlIdStick),
+              editing: widget.editing,
+              label: 'Joystick',
+              onMoved: (f) => _move(kControlIdStick, f),
+              onMoveEnd: () => _commit(kControlIdStick),
+              child: switch (widget.style) {
+                JoystickStyle.wobble =>
+                  WobbleJoystick(onDirections: _directions),
+                JoystickStyle.dpad => DpadView(onDirections: _directions),
+              },
+            ),
+            MovableControl(
+              area: area,
+              fraction: _fraction(kControlIdFire),
+              editing: widget.editing,
+              label: 'Fire',
+              onMoved: (f) => _move(kControlIdFire, f),
+              onMoveEnd: () => _commit(kControlIdFire),
+              child: _FireButton(
+                onChanged: (down) => _send(KempstonBit.fire, down),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

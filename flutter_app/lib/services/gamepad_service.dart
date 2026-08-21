@@ -53,9 +53,9 @@ class GamepadService extends ChangeNotifier {
   /// Currently-held key codes (ASCII), streamed as the user presses
   /// / releases them. The emulator screen forwards these to the
   /// bridge via `keyEvent(key, flags)`.
-  final StreamController<_KeyEvent> _keyEvents =
-      StreamController<_KeyEvent>.broadcast();
-  Stream<_KeyEvent> get keyEvents => _keyEvents.stream;
+  final StreamController<GamepadKeyEvent> _keyEvents =
+      StreamController<GamepadKeyEvent>.broadcast();
+  Stream<GamepadKeyEvent> get keyEvents => _keyEvents.stream;
 
   GamepadService(this.core, {this.port = 1}) {
     _sub = Gamepads.normalizedEvents.listen(_handleEvent,
@@ -128,7 +128,7 @@ class GamepadService extends ChangeNotifier {
   }
 
   void _emitKey(int key, bool down) {
-    _keyEvents.add(_KeyEvent(key, down ? _kfDown : 0));
+    _keyEvents.add(GamepadKeyEvent(key, down ? _kfDown : 0));
   }
 
   @override
@@ -142,8 +142,14 @@ class GamepadService extends ChangeNotifier {
   }
 }
 
-class _KeyEvent {
+/// One key press or release from a physical pad, in the core's own terms:
+/// [key] is what speccy_core_key_event takes, [flags] carries KF_DOWN.
+///
+/// Public because the emulator screen is what forwards these to the core.
+/// While this was private the stream could not be consumed outside this
+/// file at all, so every button mapped to a key was emitted and dropped.
+class GamepadKeyEvent {
   final int key;
   final int flags;
-  const _KeyEvent(this.key, this.flags);
+  const GamepadKeyEvent(this.key, this.flags);
 }

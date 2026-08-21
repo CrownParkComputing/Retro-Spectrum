@@ -10,6 +10,7 @@
 // rendered from the workbench too. This screen no longer owns its own
 // Scaffold -- the emulator chrome is below the picture, not on it.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -37,6 +38,7 @@ class EmulatorScreen extends StatefulWidget {
   /// rendered).
   final bool showKeyboard;
   final bool showJoystick;
+  final bool editingLayout;
 
   const EmulatorScreen({
     super.key,
@@ -46,6 +48,7 @@ class EmulatorScreen extends StatefulWidget {
     this.entry,
     this.showKeyboard = false,
     this.showJoystick = false,
+    this.editingLayout = false,
   });
 
   @override
@@ -54,13 +57,20 @@ class EmulatorScreen extends StatefulWidget {
 
 class _EmulatorScreenState extends State<EmulatorScreen> {
   GamepadService? _gamepad;
+  StreamSubscription<GamepadKeyEvent>? _gamepadKeys;
   String _currentDisc = '';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadMedia());
-    _gamepad = GamepadService(widget.core, port: 1);
+    final gamepad = GamepadService(widget.core, port: 1);
+    // Kempston already goes straight to the core inside the service. Keys
+    // did not: they were emitted onto a stream nothing subscribed to, so a
+    // pad button mapped to a Spectrum key did nothing at all.
+    _gamepadKeys = gamepad.keyEvents.listen(
+        (e) => widget.core.keyEvent(e.key, e.flags));
+    _gamepad = gamepad;
   }
 
   @override
@@ -79,6 +89,7 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
         widget.core.saveState(CorePaths.saveStatePath);
       } catch (_) {}
     } catch (_) {}
+    _gamepadKeys?.cancel();
     _gamepad?.dispose();
     super.dispose();
   }
@@ -120,7 +131,12 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
       // and a Spectrum screen is 4:3 on a wide display -- there is room
       // either side of the picture and none below it.
       if (widget.showJoystick)
-        Positioned.fill(child: KempstonPad(core: widget.core)),
+        Positioned.fill(
+          child: KempstonPad(
+            core: widget.core,
+            editing: widget.editingLayout,
+          ),
+        ),
 
       // The keyboard takes the foot of the view rather than floating: it is
       // forty keys, it is being read, and a game that wants a keypress has

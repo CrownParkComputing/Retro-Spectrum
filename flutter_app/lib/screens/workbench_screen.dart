@@ -62,6 +62,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   /// when a session ends.
   bool _keyboardVisible = false;
   bool _joystickVisible = false;
+  bool _editingLayout = false;
 
   /// Scaffold key so the in-game Settings button can open the drawer that
   /// lives on the workbench's Scaffold (EmulatorScreen no longer owns a
@@ -119,6 +120,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       _inEmulator = false;
       _keyboardVisible = false;
       _joystickVisible = false;
+      _editingLayout = false;
       // Snapshot the title so the resume banner has something to label and
       // the resume handler can re-enter the emulator screen on top.
       _pausedSession = _currentEntry;
@@ -141,6 +143,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       _inEmulator = false;
       _keyboardVisible = false;
       _joystickVisible = false;
+      _editingLayout = false;
       _pausedSession = null;
       _currentEntry = null;
     });
@@ -461,6 +464,26 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         visualDensity: VisualDensity.compact,
         padding: EdgeInsets.zero,
       ),
+      // Only while the stick is up: moving controls that are not on screen
+      // is a mode with nothing in it.
+      if (_joystickVisible) ...[
+        const SizedBox(width: 6),
+        IconButton(
+          tooltip: _editingLayout
+              ? 'Done moving controls'
+              : 'Move the stick and fire button',
+          icon: Icon(
+            _editingLayout ? Icons.check : Icons.open_with,
+            size: 18,
+          ),
+          color: _editingLayout
+              ? const Color(0xFF6DD3FF)
+              : SpectrumColors.sidebarLabelIdle,
+          onPressed: () => setState(() => _editingLayout = !_editingLayout),
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+        ),
+      ],
       const SizedBox(width: 6),
       IconButton(
         tooltip: 'Settings',
@@ -563,6 +586,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         entry: _currentEntry,
         showKeyboard: _keyboardVisible,
         showJoystick: _joystickVisible,
+        editingLayout: _editingLayout,
       ),
     );
   }
