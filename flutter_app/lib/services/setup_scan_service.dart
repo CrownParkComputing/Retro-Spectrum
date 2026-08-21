@@ -9,7 +9,7 @@
 //
 // On Android the most common layout is /storage/FEDD-B1FF/Spectrum/{BIOS,
 // Games} (the convention the other Retro-* front ends use). On Linux
-// it's ~/Spectrum/{GamesGames}. iOS is file-import only.
+// it's ~/Spectrum/Games. iOS is file-import only.
 
 import 'dart:io';
 
@@ -18,25 +18,33 @@ import 'package:retro_spectrum/services/library_scanner.dart';
 
 class ScanResult {
   final String folderPath;
-  final List<String> biosCandidates;
   final List<MediaEntry> games;
 
-  const ScanResult({
-    required this.folderPath,
-    required this.biosCandidates,
-    required this.games,
-  });
+  const ScanResult({required this.folderPath, required this.games});
 
-  bool get hasBios => biosCandidates.isNotEmpty;
   bool get hasGames => games.isNotEmpty;
-  bool get isEmpty => !hasBios && !hasGames;
+  bool get isEmpty => games.isEmpty;
 }
 
 class SetupScanService {
   /// Default folders to probe in priority order. First hit wins.
+  /// Probed in order, first one that exists wins.
+  ///
+  /// The Roms/<system> shape is here because that is how handhelds actually
+  /// arrive: every front end on a Retroid, an Anbernic or a stock SD card
+  /// image lays its library out that way, and a list that only knew about a
+  /// folder called "Spectrum" guessed wrong on every one of them -- leaving
+  /// a first-run screen that found nothing on a device with a full
+  /// collection on it.
   static const _defaultFolders = <String>[
+    '/storage/FEDD-B1FF/Roms/zxspectrum',
+    '/storage/FEDD-B1FF/Roms/spectrum',
     '/storage/FEDD-B1FF/Spectrum',
+    '/storage/emulated/0/Roms/zxspectrum',
+    '/storage/emulated/0/Roms/spectrum',
     '/storage/emulated/0/Spectrum',
+    '/sdcard/Roms/zxspectrum',
+    '/sdcard/Roms/spectrum',
     '/sdcard/Spectrum',
   ];
 
@@ -57,13 +65,11 @@ class SetupScanService {
 
   /// Probe a folder for BIOS + game files. BIOS candidates = saturn*.bin
   static Future<ScanResult> scan(String folderPath) async {
-    final bios = <String>[];
     final games = <MediaEntry>[];
 
     final dir = Directory(folderPath);
     if (!dir.existsSync()) {
-      return ScanResult(folderPath: folderPath,
-          biosCandidates: const [], games: const []);
+      return ScanResult(folderPath: folderPath, games: const []);
     }
 
     // Scan recursively for BIOS + game files
@@ -89,8 +95,7 @@ class SetupScanService {
       }
     }
 
-    return ScanResult(folderPath: folderPath,
-        biosCandidates: bios, games: _dedup(games));
+    return ScanResult(folderPath: folderPath, games: _dedup(games));
   }
 
   /// Two CHD/CUE files for the same game often live side by side — e.g.

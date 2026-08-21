@@ -151,11 +151,6 @@ class _PathsSettingsScreenState extends State<PathsSettingsScreen> {
               style: const TextStyle(fontSize: 11, color: Colors.white54)),
           const SizedBox(height: 8),
           Row(children: [
-            const Icon(Icons.memory, size: 16),
-            const SizedBox(width: 6),
-            Text('${s.biosCandidates.length} BIOS',
-                style: const TextStyle(fontSize: 13)),
-            const SizedBox(width: 16),
             const Icon(Icons.videogame_asset, size: 16),
             const SizedBox(width: 6),
             Text('${s.games.length} games',

@@ -201,7 +201,8 @@ class _LibraryGridState extends State<LibraryGrid> {
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 2),
           child: Text(
             _scan.entries.isEmpty
-                ? 'No games found. Supported: CHD, CUE, MDS, CCD, ISO.'
+                ? 'No games found. Supported: '
+                    '${kSupportedExtensions.map((e) => e.toUpperCase()).join(', ')}.'
                 : '${entries.length} of ${_scan.entries.length} | ${_scan.unreadableCount} unreadable',
             style: const TextStyle(
                 color: Color(0xFF6D7689), fontSize: 10),

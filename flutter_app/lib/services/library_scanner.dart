@@ -113,14 +113,18 @@ String dedupBaseName(String base) {
   return s.isEmpty ? base : s;
 }
 
-/// Saturn disc formats the core can mount. The scanner returns entries
-/// for these only; anything else doesn't show up.
-const Set<String> kSupportedDiscExtensions = {
-  'chd',
-  'cue',
-  'mds',
-  'ccd',
-  'iso',
+/// The extensions the scanner will return entries for; anything else does
+/// not show up.
+///
+/// Derived from MediaFormat, deliberately, rather than listed again.
+///
+/// This was a second hardcoded set -- chd, cue, mds, ccd, iso -- and the two
+/// drifting apart is exactly how a Spectrum library scanned as empty while
+/// MediaFormat already knew about .tap and .tzx: the scanner rejected every
+/// file before the format enum was ever consulted.
+final Set<String> kSupportedExtensions = {
+  for (final f in MediaFormat.values)
+    if (f.isSupported) f.name,
 };
 
 class LibraryScanner {
@@ -140,7 +144,7 @@ class LibraryScanner {
       if (f is! File) continue;
       final ext = p.extension(f.path).replaceFirst('.', '');
       if (ext.isEmpty) continue;
-      if (!kSupportedDiscExtensions.contains(ext.toLowerCase())) continue;
+      if (!kSupportedExtensions.contains(ext.toLowerCase())) continue;
       if (!isReadable(f)) {
         unreadable++;
         continue;

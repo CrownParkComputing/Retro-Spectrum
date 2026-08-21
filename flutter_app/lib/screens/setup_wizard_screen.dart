@@ -1,16 +1,26 @@
-// setup_wizard_screen.dart — Auto-scans the default Spectrum folder
-// for BIOS + game files. Like ViceMultiplatform's wizard: one screen,
-// what was found is listed, user can pick a different folder or finish.
-// Compact: no big headings, tight padding.
-
+// setup_wizard_screen.dart — First run: point the app at your games.
+//
+// There is exactly one thing this app needs from the user, and it is a
+// folder. The ROMs are built in (see RomLoader), so unlike the Saturn front
+// end this was adapted from there is no BIOS to hunt down and no second
+// step -- that wizard asked for a 512 KiB BIOS blob and a games folder, and
+// refused to finish without the first.
+//
+// It guesses first and asks second: the common locations get probed, and if
+// one of them has games in it the user can accept and move on without a file
+// picker. When the guess misses -- which it will on any device that keeps
+// its ROMs somewhere personal -- the screen says plainly what it looked for
+// and what it wants, because "no games found" on its own is a dead end.
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/services/app_prefs.dart';
+import 'package:retro_spectrum/services/library_scanner.dart';
 import 'package:retro_spectrum/services/setup_scan_service.dart';
 
 class SetupWizardScreen extends StatefulWidget {
-  final VoidCallback onComplete;
   const SetupWizardScreen({super.key, required this.onComplete});
+
+  final VoidCallback onComplete;
 
   @override
   State<SetupWizardScreen> createState() => _SetupWizardScreenState();
@@ -25,222 +35,191 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   @override
   void initState() {
     super.initState();
-    _runFirstScan();
+    _guess();
   }
 
-  Future<void> _runFirstScan() async {
-    String? initial = await AppPrefs.getGamesFolder();
-    initial ??= SetupScanService.autoDetectFolder();
+  Future<void> _guess() async {
+    final initial =
+        await AppPrefs.getGamesFolder() ?? SetupScanService.autoDetectFolder();
     if (initial == null) {
-      setState(() {
-        _scanned = true;
-        _folder = '(no folder selected)';
-      });
+      if (!mounted) return;
+      setState(() => _scanned = true);
       return;
     }
-    await _scanFolder(initial);
+    await _scan(initial);
   }
 
-  Future<void> _scanFolder(String path) async {
+  Future<void> _scan(String path) async {
     setState(() {
       _busy = true;
       _folder = path;
     });
-    final r = await SetupScanService.scan(path);
+    final result = await SetupScanService.scan(path);
     if (!mounted) return;
     setState(() {
-      _result = r;
+      _result = result;
       _busy = false;
       _scanned = true;
     });
   }
 
-  Future<void> _pickFolder() async {
-    final p = await FilePicker.platform.getDirectoryPath();
-    if (p != null) await _scanFolder(p);
+  Future<void> _pick() async {
+    final chosen = await FilePicker.platform.getDirectoryPath();
+    if (chosen != null) await _scan(chosen);
   }
 
   Future<void> _finish() async {
-    final r = _result;
-    if (r != null && r.hasBios) {
-      await AppPrefs.setBiosPath(r.biosCandidates.first);
-    }
-    if (r != null && r.hasGames) {
-      await AppPrefs.setGamesFolder(r.folderPath);
-    }
+    if (_folder.isNotEmpty) await AppPrefs.setGamesFolder(_folder);
     await AppPrefs.setSetupCompleted(true);
     widget.onComplete();
   }
 
   @override
   Widget build(BuildContext context) {
+    final result = _result;
+    final found = result?.games.length ?? 0;
+
     return Scaffold(
       backgroundColor: const Color(0xFF050607),
       body: SafeArea(
-        child: Column(children: [
-          if (_busy) const LinearProgressIndicator(),
-          Expanded(child: _buildBody()),
-          if (_scanned && !_busy) _buildActions(context),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (!_scanned) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    final r = _result;
-    if (r == null || r.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('No BIOS or games found.',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text('$_folder',
-              style: const TextStyle(fontSize: 11, color: Colors.white54),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 8),
-          const Text(
-              'Expected: <folder>/BIOS/saturn_bios.bin (512 KiB) +\n'
-              '<folder>/Games/<title>.chd',
-              style: TextStyle(fontSize: 11, color: Colors.white54)),
-          const Spacer(),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _pickFolder,
-            icon: const Icon(Icons.folder, size: 16),
-            label: const Text('Pick different folder'),
-          ),
-        ]),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.search, size: 14, color: Colors.white54),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(_folder,
-                style: const TextStyle(fontSize: 11, color: Colors.white54),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-        ]),
-        const SizedBox(height: 8),
-        Row(children: [
-          _Chip(icon: Icons.memory, label: 'BIOS',
-              count: r.biosCandidates.length),
-          const SizedBox(width: 8),
-          _Chip(icon: Icons.videogame_asset, label: 'Games',
-              count: r.games.length),
-        ]),
-        const SizedBox(height: 8),
-        Expanded(child: ListView(
-          children: [
-            if (r.biosCandidates.isNotEmpty) ...[
-              const _SectionHeader(label: 'BIOS'),
-              ...r.biosCandidates.map((p) => _FileRow(path: p)),
-            ],
-            if (r.games.isNotEmpty) ...[
-              const _SectionHeader(label: 'Games'),
-              ...r.games.take(40).map((g) => _FileRow(path: g.path)),
-              if (r.games.length > 40)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text('+ ${r.games.length - 40} more',
-                      style: const TextStyle(fontSize: 10, color: Colors.white38)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: !_scanned
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Where are your games?',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Pick the folder holding your Spectrum files. '
+                      'Subfolders are searched too, so the top of your '
+                      'collection is enough.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_busy) const LinearProgressIndicator(),
+                    if (!_busy) _folderCard(found),
+                    const SizedBox(height: 12),
+                    _Supported(),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _busy ? null : _pick,
+                            icon: const Icon(Icons.folder_open, size: 18),
+                            label: Text(found > 0
+                                ? 'Choose a different folder'
+                                : 'Choose games folder'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            // Finishing with nothing found is allowed: the
+                            // folder can be set later from Paths, and
+                            // trapping someone on this screen because their
+                            // collection is not plugged in yet helps nobody.
+                            onPressed: _busy ? null : _finish,
+                            child: Text(found > 0 ? 'Start' : 'Skip for now'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-            ],
-          ],
-        )),
-      ]),
-    );
-  }
-
-  Widget _buildActions(BuildContext context) {
-    final r = _result;
-    final canFinish = r != null && r.hasBios && r.hasGames;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Row(children: [
-        TextButton.icon(
-          onPressed: _busy ? null : _pickFolder,
-          icon: const Icon(Icons.folder, size: 14),
-          label: const Text('Pick different'),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: const Size(0, 32),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
         ),
-        const Spacer(),
-        FilledButton(
-          onPressed: canFinish ? _finish : null,
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            minimumSize: const Size(0, 32),
-          ),
-          child: const Text('Finish'),
-        ),
-      ]),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int count;
-  const _Chip({required this.icon, required this.label, required this.count});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F2C),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFF2B3340)),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: Colors.white54),
-        const SizedBox(width: 4),
-        Text('$label: $count',
-            style: const TextStyle(fontSize: 11, color: Colors.white70)),
-      ]),
+    );
+  }
+
+  Widget _folderCard(int found) {
+    final none = _folder.isEmpty;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF13131A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: found > 0 ? const Color(0xFF2E7D48) : const Color(0xFF2A2A34),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            found > 0 ? Icons.check_circle : Icons.folder_off,
+            size: 20,
+            color: found > 0 ? const Color(0xFF61C888) : Colors.white38,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  none
+                      ? 'No folder chosen yet'
+                      : found > 0
+                          ? '$found ${found == 1 ? 'title' : 'titles'} found'
+                          : 'Nothing playable in this folder',
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                if (!none) ...[
+                  const SizedBox(height: 2),
+                  Text(_folder,
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.white54),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  const _SectionHeader({required this.label});
+/// What counts as a game, said out loud.
+///
+/// Read from MediaFormat rather than typed here, so this cannot promise a
+/// format the scanner then ignores -- which is exactly what the Saturn
+/// version of this screen did, listing CHD and ISO to Spectrum owners.
+class _Supported extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 6, 0, 2),
-      child: Text(label.toUpperCase(),
-          style: const TextStyle(
-              fontSize: 10,
-              color: Colors.white38,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2)),
-    );
-  }
-}
-
-class _FileRow extends StatelessWidget {
-  final String path;
-  const _FileRow({required this.path});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Text(path.split('/').last,
-          style: const TextStyle(fontSize: 12),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis),
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final ext in kSupportedExtensions)
+          Chip(
+            label: Text('.$ext',
+                style: const TextStyle(fontSize: 11, color: Colors.white70)),
+            backgroundColor: const Color(0xFF1A1A22),
+            side: const BorderSide(color: Color(0xFF2A2A34)),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        Chip(
+          label: Text(
+            'ROMs are built in',
+            style: TextStyle(
+                fontSize: 11, color: Colors.white.withValues(alpha: 0.45)),
+          ),
+          backgroundColor: Colors.transparent,
+          side: BorderSide.none,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ],
     );
   }
 }
