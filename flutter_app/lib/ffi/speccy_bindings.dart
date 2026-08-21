@@ -238,9 +238,18 @@ class SpeccyCoreBindings {
       final w = wPtr.value;
       final h = hPtr.value;
       if (fbPtr == nullptr || w == 0 || h == 0) return null;
+      // asTypedList counts ELEMENTS, and fbPtr is a Pointer<Uint32>: one
+      // element is one pixel, not one byte. Asking for len * 4 asked for
+      // four times the whole framebuffer -- 1.2 MB read out of a 307 KB
+      // array -- and the read ran off the end of the mapping and took the
+      // process down with SIGSEGV the moment a game was launched.
       final len = w * h;
-      final list = Uint8List.fromList(fbPtr.asTypedList(len * 4));
-      return FrameSnapshot(width: w, height: h, rgba: list);
+      final pixels = fbPtr.asTypedList(len);
+      // Copied, not viewed: the core overwrites this buffer on the next
+      // frame, and a view would change under the decoder.
+      final rgba = Uint8List.fromList(
+          pixels.buffer.asUint8List(pixels.offsetInBytes, len * 4));
+      return FrameSnapshot(width: w, height: h, rgba: rgba);
     } finally {
       calloc.free(wPtr);
       calloc.free(hPtr);
