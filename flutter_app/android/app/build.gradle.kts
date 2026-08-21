@@ -69,7 +69,8 @@ android {
     // on the build machine happens to default to, which is how Play
     // compliance ends up depending on which laptop or runner did the build.
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // The NDK the family builds its cores with.
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -87,7 +88,11 @@ android {
         // already lives. Changing it would mean publishing as a brand-new
         // app; existing installs would not auto-update. Pick once and keep.
         applicationId = "com.crownpark.retro_spectrum"
-        minSdk = flutter.minSdkVersion
+        // 26, the Retro-* family standard. There is no Android core in this
+        // project yet (native/speccy_core/android is empty), so nothing
+        // constrains this from below -- it is set to match its siblings so
+        // the first core built here has the target to hit.
+        minSdk = 26
         // Play requires the target to stay within a year of the latest
         // Android release - 36 or higher from 31 August 2026 - and refuses
         // updates outright below that. flutter.targetSdkVersion floats with
