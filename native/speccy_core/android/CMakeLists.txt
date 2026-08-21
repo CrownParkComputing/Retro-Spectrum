@@ -60,7 +60,8 @@ set(SPECCY_3RD
 add_library(speccycore SHARED
     ${SPECCY_CORE_SRC}
     ${SPECCY_3RD}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../bridge/speccy_bridge.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../bridge/speccy_bridge.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../bridge/audio_backend_android.cpp")
 
 target_include_directories(speccycore PRIVATE
     "${SPECCY_SRC}"
@@ -77,7 +78,9 @@ target_compile_definitions(speccycore PRIVATE
 
 # libz is part of the NDK sysroot, so no pkg-config -- unlike the Linux
 # build, which finds it through PkgConfig::ZLIB.
-target_link_libraries(speccycore PRIVATE z Threads::Threads)
+# aaudio is the platform's low-latency output; it is part of the NDK from
+# API 26, which is this build's floor anyway.
+target_link_libraries(speccycore PRIVATE z aaudio Threads::Threads)
 
 target_compile_options(speccycore PRIVATE -w)
 

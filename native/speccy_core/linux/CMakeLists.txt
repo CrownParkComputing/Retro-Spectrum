@@ -71,7 +71,10 @@ set(SPECCY_3RD
 add_library(speccycore SHARED
     ${SPECCY_CORE_SRC}
     ${SPECCY_3RD}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../bridge/speccy_bridge.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../bridge/speccy_bridge.cpp"
+    # Silence on the host: there is no device to open in a headless build,
+    # and the core still mixes so the level meter still works.
+    "${CMAKE_CURRENT_SOURCE_DIR}/../bridge/audio_backend_stub.cpp")
 
 target_include_directories(speccycore PRIVATE
     "${SPECCY_SRC}"

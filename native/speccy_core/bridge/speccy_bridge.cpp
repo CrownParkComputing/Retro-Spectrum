@@ -13,6 +13,7 @@
  */
 
 #include "speccy_bridge.h"
+#include "audio_backend.h"
 
 #include <string.h>
 #include <string>
@@ -154,6 +155,11 @@ int32_t speccy_core_start(void)
 		return -1;
 	CoreInit(g_profile_dir.c_str());
 	Handler()->AudioSetSampleRate(g_sample_rate);
+	/* Opened here rather than by the host: the device has to agree with the
+	   rate the core was just told to mix at, and doing it in one place is
+	   what stops the two drifting. A failure is not fatal -- a silent
+	   emulator still plays. */
+	speccy_audio_start(g_sample_rate);
 	g_running = true;
 	g_paused = false;
 	g_frame_counter = 0;
@@ -165,6 +171,11 @@ void speccy_core_stop(void)
 	if(!g_running)
 		return;
 	CoreDone();
+	/* Closed, not just silenced. An open AAudio stream holds an AudioMix
+	   wake lock for as long as it exists, so leaving one behind keeps the
+	   CPU awake with nothing playing -- the same fault, and the same fix,
+	   as Retro-Amiga's music player. */
+	speccy_audio_stop();
 	g_running = false;
 	g_paused = false;
 }
@@ -184,6 +195,9 @@ const char *speccy_core_run_frame(void)
 void speccy_core_set_paused(int32_t paused)
 {
 	g_paused = paused != 0;
+	/* Muted rather than closed: a pause is usually brief, and reopening the
+	   device costs more than the silence is worth. */
+	speccy_audio_set_muted(g_paused ? 1 : 0);
 	if(g_running)
 		Handler()->VideoPaused(g_paused);
 }
