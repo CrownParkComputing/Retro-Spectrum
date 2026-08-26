@@ -168,7 +168,7 @@ class _EmulatorSessionScreenState extends State<EmulatorSessionScreen> {
                     _ResumeButton(onTap: () => _setMenu(false)),
                     const SizedBox(height: 28),
                     _MenuChoice(
-                      icon: Icons.save_outlined,
+                      icon: Icons.bookmark_add_outlined,
                       label: 'Save and exit',
                       detail:
                           'Snapshot this session and return to the workbench',
@@ -256,8 +256,8 @@ class _EmulatorSessionScreenState extends State<EmulatorSessionScreen> {
           },
         ),
         _RailTool(
-          icon: Icons.gamepad,
-          label: 'Stick',
+          icon: Icons.videogame_asset,
+          label: 'Pad',
           lit: _joystickVisible,
           tooltip:
               _joystickVisible ? 'Hide joystick' : 'Show joystick (Kempston)',

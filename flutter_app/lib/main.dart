@@ -40,7 +40,7 @@ class _RetroSpectrumAppState extends State<RetroSpectrumApp>
   String? _loadError;
   bool? _setupCompleted;
 
-  bool _corePausedBeforeBackground = false;
+  bool _pausedByLifecycle = false;
 
   @override
   void initState() {
@@ -63,13 +63,30 @@ class _RetroSpectrumAppState extends State<RetroSpectrumApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    final foreground = state == AppLifecycleState.resumed;
     final core = _core;
-    if (!foreground) {
-      _corePausedBeforeBackground = core?.isRunning ?? false;
-      if (!_corePausedBeforeBackground) core?.setPaused(true);
-    } else {
-      if (!_corePausedBeforeBackground) core?.setPaused(false);
+    if (core == null) return;
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      // Only a REAL backgrounding pauses the machine. `inactive` fires for a
+      // notification shade, a permission dialog, or losing window focus on
+      // desktop -- pausing there freezes the game under a still-visible
+      // window, which is the bug Retro-Amiga's live release taught us about.
+      //
+      // Tracked as "did WE pause it" rather than re-reading the core's state
+      // on every event: one backgrounding delivers several non-resumed
+      // events, and the second one would see the pause we just applied and
+      // record it as the user's. (The old guard here also stored isRunning
+      // where it meant isPaused, so lifecycle never paused anything at all
+      // -- the core kept burning battery behind the launcher.)
+      if (!_pausedByLifecycle) {
+        core.setPaused(true);
+        _pausedByLifecycle = true;
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_pausedByLifecycle) {
+        core.setPaused(false);
+        _pausedByLifecycle = false;
+      }
     }
   }
 
