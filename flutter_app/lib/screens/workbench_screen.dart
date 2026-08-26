@@ -21,7 +21,7 @@ import 'package:retro_spectrum/data/media_entry.dart';
 import 'package:retro_spectrum/ffi/speccy_core.dart';
 import 'package:retro_spectrum/screens/about_screen.dart';
 import 'package:retro_spectrum/screens/audio_settings_screen.dart';
-import 'package:retro_spectrum/screens/emulator_screen.dart';
+import 'package:retro_spectrum/screens/emulator_session_screen.dart';
 import 'package:retro_spectrum/screens/history_screen.dart';
 import 'package:retro_spectrum/screens/input_settings_screen.dart';
 import 'package:retro_spectrum/screens/library_grid.dart';
@@ -55,22 +55,6 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   /// (kill) and Pause (snapshot) buttons leave the Dart side in
   /// distinguishable states.
   MediaEntry? _currentEntry;
-
-  /// On-screen Saturn pad overlay toggle. Lifted out of EmulatorScreen so
-  /// the toolbar in [_statusBar] (this screen's bottom row) and the
-  /// EmulatorScreen's overlay render see the same source of truth. Reset
-  /// when a session ends.
-  bool _keyboardVisible = false;
-  bool _joystickVisible = false;
-  bool _editingLayout = false;
-
-  /// Scaffold key so the in-game Settings button can open the drawer that
-  /// lives on the workbench's Scaffold (EmulatorScreen no longer owns a
-  /// Scaffold of its own).
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  /// True when the emulator screen is on top of the workbench.
-  bool _inEmulator = false;
 
   /// Whether the side rail is collapsed. The launcher button + the running
   /// tab live in the rail; collapsing it gives the emulator screen as much
@@ -110,49 +94,40 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     });
   }
 
-  /// Toolbar Pause on the emulator screen. Snapshots the running machine
-  /// via [SpeccyCore.saveState] then drops back to the workbench so a fresh
-  /// library grid + a "Paused: <title>" banner are visible.
-  Future<void> _onSessionPause() async {
-    final result = widget.core.saveState(_saveStatePath);
+  /// Hands the session its own screen -- the family pattern shared with
+  /// the Amiga, Saturn, C64 and DOSBox front ends. Every way into a game
+  /// funnels through here, so pausing and closing land back on the
+  /// workbench in exactly one place.
+  Future<void> _openSession(MediaEntry? entry) async {
     if (!mounted) return;
     setState(() {
-      _inEmulator = false;
-      _keyboardVisible = false;
-      _joystickVisible = false;
-      _editingLayout = false;
-      // Snapshot the title so the resume banner has something to label and
-      // the resume handler can re-enter the emulator screen on top.
-      _pausedSession = _currentEntry;
-    });
-    _stopRuntimeTicker();
-    if (result != 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Could not save your session (error $result).'),
-      ));
-    }
-  }
-
-  /// Toolbar X on the emulator screen. Closes the running session and
-  /// returns to the workbench with no resume snapshot. The core stays
-  /// alive because [SpeccyCore] is shared with the launcher (see
-  /// _RetroSaturnAppState.dispose); calling dispose() here would break
-  /// the bare-launcher mode.
-  void _onSessionExit() {
-    setState(() {
-      _inEmulator = false;
-      _keyboardVisible = false;
-      _joystickVisible = false;
-      _editingLayout = false;
+      _currentEntry = entry;
       _pausedSession = null;
-      _currentEntry = null;
     });
-    _stopRuntimeTicker();
+    final SessionExit? how = await Navigator.of(context).push<SessionExit>(
+      MaterialPageRoute<SessionExit>(
+        fullscreenDialog: true,
+        builder: (BuildContext context) => EmulatorSessionScreen(
+          core: widget.core,
+          biosPath: _biosPath,
+          gamesFolder: _gamesFolder,
+          entry: entry,
+          saveStatePath: _saveStatePath,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _pausedSession = how == SessionExit.paused ? _currentEntry : null;
+      if (how != SessionExit.paused) _currentEntry = null;
+    });
   }
 
   /// Tap on the "Paused: <title>" banner. Restores the snapshot the
-  /// Pause handler wrote, brings the emulator screen back.
+  /// session screen's Save and exit wrote, then re-enters the session.
   Future<void> _onResumePaused() async {
+    final paused = _pausedSession;
+    if (paused == null) return;
     final result = widget.core.loadState(_saveStatePath);
     if (!mounted) return;
     if (result != 0) {
@@ -161,11 +136,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       ));
       return;
     }
-    setState(() {
-      _pausedSession = null;
-      _inEmulator = true;
-    });
-    _startRuntimeTicker();
+    await _openSession(paused);
   }
 
   /// Drop the paused snapshot without resuming. The file stays on disk
@@ -179,13 +150,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     switch (_category) {
       case WorkbenchCategory.resume:
         // Resume is hidden from the rail when no session is paused, so
-        // landing here means a paused session exists. If the auto-resume
-        // in the rail's onSelected fired, _inEmulator is already true and
-        // the in-emulator panel renders. Otherwise drop back to the
-        // resumable banner so the user can retry or discard.
-        if (_inEmulator) {
-          return _emulatorPanel();
-        }
+        // landing here means a paused session exists; the banner offers
+        // it back, or the user can discard and start over.
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -206,17 +172,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         }
         return LibraryGrid(
           folderPath: _gamesFolder,
-          onLaunch: (entry) async {
-            if (!mounted) return;
-            setState(() {
-              // Store the entry so the in-panel EmulatorScreen can
-              // loadDisc() it. Without this, the BIOS boots to the CD
-              // Player's "No Disc" screen.
-              _currentEntry = entry;
-              _inEmulator = true;
-            });
-            _startRuntimeTicker();
-          },
+          onLaunch: (entry) => unawaited(_openSession(entry)),
         );
       case WorkbenchCategory.paths:
         return const PathsSettingsScreen();
@@ -234,9 +190,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      key: _scaffoldKey,
       backgroundColor: SpectrumColors.rootBackground,
-      drawer: _buildDrawer(context),
       body: Container(
         color: SpectrumColors.rootBackground,
         child: SafeArea(
@@ -329,9 +283,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                     ),
                   ]),
                 )
-              : _inEmulator
-                  ? _runtimeStrip()
-                  : _currentEntry != null
+              : _currentEntry != null
                       ? Text(
                           _currentEntry!.displayName,
                           maxLines: 1,
@@ -342,213 +294,14 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                         )
                       : const SizedBox.shrink(),
         ),
-        if (_inEmulator) ..._inGameToolbar(),
       ],
     );
   }
 
-  /// The middle of the in-emulator status bar: title + FPS + audio meter.
-  /// Replaces the sidebar footer's Core/FPS/Audio block, which used to be
-  /// reachable without a game running (and so mostly sat empty). The
-  /// render lives here, where it has meaning only when something is
-  /// playing; the values re-poll twice a second via [_runtimeTicker].
-  /// A Timer for the poll is enough -- the values move slowly enough
-  /// that driving them off the framebuffer's per-frame rebuild would
-  /// be overkill.
-  Widget _runtimeStrip() {
-    final core = widget.core;
-    return Row(children: [
-      Flexible(
-        child: Text(
-          _currentEntry?.displayName ?? '',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-              fontSize: 12, color: SpectrumColors.sidebarLabelIdle),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Text('FPS ${(core.fpsX100 / 100).toStringAsFixed(2)}',
-          style: const TextStyle(
-              fontSize: 11, color: SpectrumColors.sidebarLabelIdle)),
-      const SizedBox(width: 8),
-      SizedBox(
-        width: 48,
-        height: 8,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: Stack(children: [
-            Container(color: Colors.white12),
-            FractionallySizedBox(
-              widthFactor: (core.audioLevel.clamp(0, 1000)) / 1000.0,
-              heightFactor: 1,
-              child: Container(
-                color: const Color(0xFF60A0FF),
-              ),
-            ),
-          ]),
-        ),
-      ),
-      // volume, not sound: `sound` is an int option (beeper/ay/tape), so
-      // asking eOption<bool>::Find for it never matches and the icon was
-      // stuck on regardless of whether anything was muted. Index 0 of
-      // volume is literally named "mute".
-      if (core.getOptionInt('volume', 5) == 0) ...[
-        const SizedBox(width: 4),
-        const Icon(Icons.volume_off,
-            size: 12, color: SpectrumColors.sidebarLabelIdle),
-      ],
-    ]);
-  }
-
-  /// Twice-a-second refresh for the runtime strip. Started when a
-  /// session opens, stopped when it ends. FPS and audio level don't
-  /// move fast enough to justify a per-frame poll, and the framebuffer
-  /// view's own rebuild storm would burn battery for no UI benefit.
-  Timer? _runtimeTicker;
-
-  void _startRuntimeTicker() {
-    _runtimeTicker?.cancel();
-    _runtimeTicker = Timer.periodic(
-      const Duration(milliseconds: 500),
-      (_) {
-        if (mounted) setState(() {}); // _runtimeStrip reads core live
-      },
-    );
-  }
-
-  void _stopRuntimeTicker() {
-    _runtimeTicker?.cancel();
-    _runtimeTicker = null;
-  }
-
-  @override
-  void dispose() {
-    _runtimeTicker?.cancel();
-    super.dispose();
-  }
-
-  /// Pad toggle / settings / pause / close, right-aligned in the status bar.
-  /// Lives outside the emulator screen so chrome is drawn under the picture,
-  /// not on it -- a 4:3 frame status panel is exactly where these buttons
-  /// would be covering game UI otherwise.
-  List<Widget> _inGameToolbar() {
-    return [
-      // Two toggles, not one. The Spectrum's keyboard and its joystick are
-      // different machines' worth of input -- a text adventure wants the
-      // forty keys and a shoot-em-up wants a stick and fire -- and a single
-      // button that showed "the pad" could only ever offer one of them.
-      IconButton(
-        tooltip: _keyboardVisible
-            ? 'Hide Spectrum keyboard'
-            : 'Show Spectrum keyboard',
-        icon: Icon(
-          _keyboardVisible ? Icons.keyboard : Icons.keyboard_outlined,
-          size: 18,
-        ),
-        color: SpectrumColors.sidebarLabelIdle,
-        onPressed: () => setState(() => _keyboardVisible = !_keyboardVisible),
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-      ),
-      const SizedBox(width: 6),
-      IconButton(
-        tooltip:
-            _joystickVisible ? 'Hide joystick' : 'Show joystick (Kempston)',
-        icon: Icon(
-          _joystickVisible ? Icons.gamepad : Icons.gamepad_outlined,
-          size: 18,
-        ),
-        color: SpectrumColors.sidebarLabelIdle,
-        onPressed: () => setState(() => _joystickVisible = !_joystickVisible),
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-      ),
-      // Only while the stick is up: moving controls that are not on screen
-      // is a mode with nothing in it.
-      if (_joystickVisible) ...[
-        const SizedBox(width: 6),
-        IconButton(
-          tooltip: _editingLayout
-              ? 'Done moving controls'
-              : 'Move the stick and fire button',
-          icon: Icon(
-            _editingLayout ? Icons.check : Icons.open_with,
-            size: 18,
-          ),
-          color: _editingLayout
-              ? const Color(0xFF6DD3FF)
-              : SpectrumColors.sidebarLabelIdle,
-          onPressed: () => setState(() => _editingLayout = !_editingLayout),
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-        ),
-      ],
-      const SizedBox(width: 6),
-      IconButton(
-        tooltip: 'Settings',
-        icon: const Icon(Icons.settings, size: 18),
-        color: SpectrumColors.sidebarLabelIdle,
-        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-      ),
-      const SizedBox(width: 6),
-      IconButton(
-        tooltip: 'Pause and return to library (snapshot saved)',
-        icon: const Icon(Icons.pause, size: 18),
-        color: SpectrumColors.sidebarLabelIdle,
-        onPressed: _onSessionPause,
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-      ),
-      const SizedBox(width: 6),
-      IconButton(
-        tooltip: 'Close game (kills the core)',
-        icon: const Icon(Icons.close, size: 18),
-        color: SpectrumColors.sidebarLabelIdle,
-        onPressed: _onSessionExit,
-        visualDensity: VisualDensity.compact,
-        padding: EdgeInsets.zero,
-      ),
-    ];
-  }
-
-  /// The in-game settings drawer. Lives on the workbench Scaffold so the
-  /// toolbar's Settings button can open it; EmulatorScreen no longer owns a
-  /// Scaffold of its own.
-  Widget _buildDrawer(BuildContext context) {
-    return Drawer(
-      child: SafeArea(
-        child: ListView(padding: const EdgeInsets.all(16), children: [
-          Text('Settings', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          const SizedBox(height: 12),
-          const SizedBox(height: 16),
-          Text('Bridge status', style: Theme.of(context).textTheme.titleSmall),
-          Text('FPS: ${(widget.core.fpsX100 / 100).toStringAsFixed(2)}'),
-          Text('Audio: ${widget.core.audioLevel}/1000'),
-          Text('Sound: ${widget.core.getOptionBool("sound", true) ? "on" : "off"}'),
-          Text('Port 1: Keyboard'),
-          Text('Port 2: Kempston'),
-          if (_currentEntry != null)
-            Text('NVRAM: auto-save every 60s'),
-        ]),
-      ),
-    );
-  }
-
-  /// The right-hand pane. Renders the live emulator when a session is
-  /// running, the resumable-session card when paused, or the current
-  /// category content otherwise. When a session is running the sidebar stays
-  /// visible by default ("big window" mode -- emulator renders in the right
-  /// pane alongside the categories); the user can collapse it via the
-  /// hamburger in [_statusBar] for more room. The emulator is no longer a
-  /// push-modal route -- it is embedded, matching Retro-C64 and Retro-Dosbox.
+  /// The right-hand pane: the resumable-session card when paused, plus the
+  /// current category content. Sessions run on their own screen
+  /// (EmulatorSessionScreen) -- the workbench is only ever the launcher.
   Widget _contentPanel() {
-    if (_inEmulator) {
-      return _emulatorPanel();
-    }
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -562,31 +315,6 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           if (_pausedSession != null) _resumableBanner(),
           Expanded(child: _contentForCategory()),
         ],
-      ),
-    );
-  }
-
-  /// The in-emulator panel. Extracted so [_contentPanel] and the
-  /// Resume destination can both render the same embedded framebuffer
-  /// view -- the rail's auto-resume on the Resume entry flips
-  /// _inEmulator true, and the user then sees this same panel rather
-  /// than a separate "resumed" screen.
-  Widget _emulatorPanel() {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: SpectrumColors.panelFill,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: SpectrumColors.panelStroke),
-      ),
-      child: EmulatorScreen(
-        core: widget.core,
-        biosPath: _biosPath,
-        gamesFolder: _gamesFolder,
-        entry: _currentEntry,
-        showKeyboard: _keyboardVisible,
-        showJoystick: _joystickVisible,
-        editingLayout: _editingLayout,
       ),
     );
   }
