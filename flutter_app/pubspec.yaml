@@ -31,8 +31,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icons/
-    - assets/bezels/
+    - assets/images/
     # The Spectrum ROMs and the 4x8 font, pushed into the core as buffers
     # at startup via speccy_core_set_rom / _set_font. Freely distributable,
     # and the Android build has no other way to get them: it is compiled

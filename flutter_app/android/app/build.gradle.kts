@@ -16,11 +16,15 @@ plugins {
 //   2. `key.properties` next to this file -- a checked-out keystore + four
 //      credentials, for local dev where the env vars aren't.
 //
-// applicationId stays `com.crownpark.retro_spectrum` so existing
-// installs upgrade in place -- the display name is "Retro-Spectrum" and
-// the Kotlin namespace is `com.crownpark.retro_spectrum` for code
-// consistency, but the Play Store identity is preserved.
+// applicationId is `app.simplespeccy` so existing SimpleSpeccy installs
+// upgrade in place -- the display name is "Retro-Spectrum" and the Kotlin
+// namespace is `com.crownpark.retro_spectrum` for code consistency, but the
+// Play Store identity is the one inherited from the app this replaces.
 import java.util.Properties
+
+// Floor for the version code. SimpleSpeccy, the app this one replaces, is
+// live on 83; anything at or below that is rejected at upload.
+val SPECTRUM_VERSION_CODE_BASE = 100
 
 data class KeystoreConfig(
     val path: String,
@@ -82,12 +86,15 @@ android {
     }
 
     defaultConfig {
-        // Retro-Spectrum is the display name of this app; this applicationId
-        // remains `com.crownpark.retro_spectrum` because that is the
-        // Play Store identity under which the legacy ymir-android listing
-        // already lives. Changing it would mean publishing as a brand-new
-        // app; existing installs would not auto-update. Pick once and keep.
-        applicationId = "com.crownpark.retro_spectrum"
+        // Retro-Spectrum is the display name; `app.simplespeccy` is the Play
+        // Store identity it inherits. This app REPLACES SimpleSpeccy, whose
+        // listing has been published under that id since 2026 and is on
+        // version code 83. Shipping under any other applicationId would create
+        // a brand-new listing that existing installs never update to, which is
+        // why the Kotlin namespace (com.crownpark.retro_spectrum, below) and
+        // the applicationId deliberately differ. Play keys on this string and
+        // it can never change again.
+        applicationId = "app.simplespeccy"
         // 26, the Retro-* family standard. There is no Android core in this
         // project yet (native/speccy_core/android is empty), so nothing
         // constrains this from below -- it is set to match its siblings so
@@ -101,7 +108,12 @@ android {
         // without a line of this project changing. Compliance is a decision,
         // so it is written down.
         targetSdk = 36
-        versionCode = flutter.versionCode
+        // SimpleSpeccy published version code 83 and Play never accepts a code
+        // at or below what is already live. The pubspec restarted at 1, so the
+        // build number is lifted clear of the old line rather than colliding
+        // with it - the same pattern Retro-Dosbox uses over its Java
+        // predecessor.
+        versionCode = SPECTRUM_VERSION_CODE_BASE + flutter.versionCode
         versionName = flutter.versionName
     }
 

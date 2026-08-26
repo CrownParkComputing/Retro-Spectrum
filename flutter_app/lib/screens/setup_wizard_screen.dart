@@ -11,11 +11,14 @@
 // picker. When the guess misses -- which it will on any device that keeps
 // its ROMs somewhere personal -- the screen says plainly what it looked for
 // and what it wants, because "no games found" on its own is a dead end.
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/services/app_prefs.dart';
 import 'package:retro_spectrum/services/library_scanner.dart';
 import 'package:retro_spectrum/services/setup_scan_service.dart';
+import 'package:retro_spectrum/screens/getting_started.dart';
+import 'package:retro_spectrum/services/storage_permission.dart';
 
 class SetupWizardScreen extends StatefulWidget {
   const SetupWizardScreen({super.key, required this.onComplete});
@@ -26,21 +29,37 @@ class SetupWizardScreen extends StatefulWidget {
   State<SetupWizardScreen> createState() => _SetupWizardScreenState();
 }
 
+/// Where the walkthrough is up to -- the family's phased shape, from
+/// Retro-Amiga: introduce, teach, then ask.
+enum _Phase { welcome, primer, form }
+
 class _SetupWizardScreenState extends State<SetupWizardScreen> {
+  _Phase _phase = _Phase.welcome;
   bool _busy = false;
   bool _scanned = false;
   ScanResult? _result;
   String _folder = '';
+  String? _notice;
 
   @override
   void initState() {
     super.initState();
-    _guess();
+    _maybeResumeExistingSetup();
+  }
+
+  /// A folder already chosen means this is a re-run rather than a first
+  /// meeting -- skip the teaching and re-check it.
+  Future<void> _maybeResumeExistingSetup() async {
+    final existing = await AppPrefs.getGamesFolder();
+    if (existing == null || !mounted) return;
+    setState(() => _phase = _Phase.form);
+    await _scan(existing);
   }
 
   Future<void> _guess() async {
     final initial =
         await AppPrefs.getGamesFolder() ?? SetupScanService.autoDetectFolder();
+    setState(() => _phase = _Phase.form);
     if (initial == null) {
       if (!mounted) return;
       setState(() => _scanned = true);
@@ -50,8 +69,23 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 
   Future<void> _scan(String path) async {
+    // The games are read in place, so the scan needs the same access the
+    // emulator will: ask BEFORE walking, because a scan that silently finds
+    // nothing reads as "the app is broken", not "it was never allowed to
+    // look".
+    if (!await StoragePermission.ensure()) {
+      if (!mounted) return;
+      setState(() {
+        _scanned = true;
+        _notice = 'Without "All files access" the app cannot read a games '
+            'folder in place. Grant it and try again.';
+      });
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _busy = true;
+      _notice = null;
       _folder = path;
     });
     final result = await SetupScanService.scan(path);
@@ -64,6 +98,13 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 
   Future<void> _pick() async {
+    if (!await StoragePermission.ensure()) {
+      if (!mounted) return;
+      setState(() => _notice =
+          'Without "All files access" the app cannot read a games folder '
+          'in place. Grant it and try again.');
+      return;
+    }
     final chosen = await FilePicker.platform.getDirectoryPath();
     if (chosen != null) await _scan(chosen);
   }
@@ -82,7 +123,84 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF050607),
       body: SafeArea(
-        child: Padding(
+        child: switch (_phase) {
+          _Phase.welcome => _welcomeView(),
+          _Phase.primer => _primerView(),
+          _Phase.form => _formView(found),
+        },
+      ),
+    );
+  }
+
+  Widget _welcomeView() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.asset(
+                  'assets/images/app_icon.png',
+                  height: 104,
+                  width: 104,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (BuildContext c, Object e, StackTrace? st) =>
+                      const Icon(Icons.videogame_asset, size: 72),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Retro-Spectrum',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'A ZX Spectrum, running on this device. The machine\'s ROM is '
+              'built in — point the app at your games and it reads them '
+              'where they are.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            FilledButton(
+              onPressed: () => setState(() => _phase = _Phase.primer),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Text('Get started'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => unawaited(_guess()),
+              child: const Text('I have done this before'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _primerView() {
+    return GettingStartedGuide(
+      steps: <GuideStep>[
+        GettingStartedSteps.whatYouNeed(),
+        GettingStartedSteps.whereFilesGo(),
+      ],
+      closeLabel: 'Find my games',
+      onClose: () => unawaited(_guess()),
+      onBack: () => setState(() => _phase = _Phase.welcome),
+    );
+  }
+
+  Widget _formView(int found) {
+    return Padding(
           padding: const EdgeInsets.all(20),
           child: !_scanned
               ? const Center(child: CircularProgressIndicator())
@@ -101,6 +219,15 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                           fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
                     ),
                     const SizedBox(height: 16),
+                    if (_notice != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          _notice!,
+                          style: const TextStyle(
+                              color: Colors.orangeAccent, height: 1.4),
+                        ),
+                      ),
                     if (_busy) const LinearProgressIndicator(),
                     if (!_busy) _folderCard(found),
                     const SizedBox(height: 12),
@@ -132,8 +259,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                     ),
                   ],
                 ),
-        ),
-      ),
     );
   }
 
