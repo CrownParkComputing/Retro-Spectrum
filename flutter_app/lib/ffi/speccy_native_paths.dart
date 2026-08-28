@@ -12,6 +12,8 @@ class SpeccyNativePaths {
   /// Absolute path to libspeccycore.so on the host (Linux).
   static String? get linuxHostLibrary {
     final candidates = <String>[
+      p.join(File(Platform.resolvedExecutable).parent.path,
+          'lib', 'libspeccycore.so'),
       p.join(Directory.current.path,
           'native', 'speccy_core', 'linux', 'build', 'libspeccycore.so'),
       p.join(Directory.current.path, '..', 'native', 'speccy_core',
