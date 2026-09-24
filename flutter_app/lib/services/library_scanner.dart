@@ -25,6 +25,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../data/media_entry.dart';
+import 'app_prefs.dart';
 
 /// The library as found on disk, plus what had to be skipped.
 class LibraryScanResult {
@@ -167,6 +168,10 @@ class LibraryScanner {
         format: MediaFormat.fromExtension(ext),
         baseName: baseName,
         bezelKey: normalizeBezelKey(displayName),
+        // AppPrefs.getRecolour returns true by default; reading it
+        // here keeps the toggle sticky across re-scans so the same
+        // game launches the way the user left it.
+        recolour: await AppPrefs.getRecolour(f.path),
       ));
     }
     return LibraryScanResult(entries: entries, unreadableCount: unreadable);

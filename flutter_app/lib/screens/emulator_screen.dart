@@ -99,6 +99,13 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
 
     if (entry != null && File(entry.path).existsSync()) {
       _currentDisc = entry.path;
+      // Auto-recolour: set BEFORE openFile so the bridge has the flag
+      // when the recolour preprocess runs (phase 2.3 wires the
+      // preprocess into openFile itself; until then setRecolour is a
+      // no-op on the bridge side, and the first frame presented is the
+      // stock ZX-Spectrum rendering either way). Default on.
+      widget.core.setRecolour(entry.recolour);
+      AppLog.log('recolour: ${entry.recolour}');
       AppLog.log('openFile: ${entry.path}');
       final rc = widget.core.openFile(entry.path);
       AppLog.log('openFile rc=$rc');

@@ -18,6 +18,7 @@ class AppPrefs {
   static const _setupCompletedKey = 'setup_completed';
   static const _muteKey = 'audio_muted';
   static const _controlPositionsKey = 'control_positions';
+  static const _recolourKey = 'recolour_per_game';
 
   static Future<void> load() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -99,4 +100,40 @@ class AppPrefs {
   /// Puts every control back to its default corner.
   static Future<void> clearControlPositions() async =>
       _prefs!.remove(_controlPositionsKey);
+
+  /// Auto-recolour state per game, keyed by absolute path.
+  ///
+  /// Stored as a JSON map of `{ "<absolute path>": <bool> }`. Missing
+  /// entries default to true -- the bridge runs the recolour preprocess
+  /// on every game the user has not explicitly disabled it for.
+  static Future<bool> getRecolour(String path) async {
+    final raw = _prefs!.getString(_recolourKey);
+    if (raw == null || raw.isEmpty) return true;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return true;
+      final v = decoded[path];
+      // A `false` is the only thing worth storing -- a missing entry,
+      // a non-bool, or a `null` all default back to on. Storing true
+      // would just bloat the prefs file with the default.
+      if (v is bool) return v;
+      return true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<void> setRecolour(String path, bool value) async {
+    final current = Map<String, dynamic>.from(
+      jsonDecode(_prefs!.getString(_recolourKey) ?? '{}') as Map,
+    );
+    if (value) {
+      // Back to default -- drop the entry rather than store the same
+      // thing every game has.
+      current.remove(path);
+    } else {
+      current[path] = false;
+    }
+    await _prefs!.setString(_recolourKey, jsonEncode(current));
+  }
 }

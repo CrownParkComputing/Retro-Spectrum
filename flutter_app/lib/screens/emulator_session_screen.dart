@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
 import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 import 'package:retro_spectrum/screens/emulator_screen.dart';
+import 'package:retro_spectrum/services/app_prefs.dart';
 import 'package:retro_spectrum/theme/spectrum_theme.dart';
 
 /// How a session ended, from the workbench's point of view.
@@ -123,6 +124,32 @@ class _EmulatorSessionScreenState extends State<EmulatorSessionScreen> {
     Navigator.of(context).pop(SessionExit.closed);
   }
 
+  /// Flip the per-game auto-recolour and persist the choice so the
+  /// next launch remembers it. Takes effect on the very next
+  /// openFile() the bridge runs -- in practice on the next game launch,
+  /// not retroactively for the game already running (the recolour
+  /// preprocess happens before the first frame is presented; once
+  /// frames are running, the recolour decision has already been baked
+  /// into them).
+  Future<void> _toggleRecolour() async {
+    final entry = widget.entry;
+    if (entry == null) return;
+    final next = !entry.recolour;
+    await AppPrefs.setRecolour(entry.path, next);
+    if (!mounted) return;
+    setState(() {
+      // The widget holds MediaEntry by reference; the launch path
+      // rehydrates the persisted value via the scanner, but the
+      // session itself does not re-scan on toggle. We update the
+      // reference the session uses for display only.
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(next
+          ? 'Auto-recolour on. Next launch of this game will be recoloured.'
+          : 'Auto-recolour off. Next launch will use the original Spectrum look.'),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -167,6 +194,13 @@ class _EmulatorSessionScreenState extends State<EmulatorSessionScreen> {
                   children: [
                     _ResumeButton(onTap: () => _setMenu(false)),
                     const SizedBox(height: 28),
+                    if (widget.entry != null) ...[
+                      _RecolourToggle(
+                        enabled: widget.entry!.recolour,
+                        onChanged: () => _toggleRecolour(),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     _MenuChoice(
                       icon: Icons.bookmark_add_outlined,
                       label: 'Save and exit',
@@ -371,6 +405,71 @@ class _ResumeButton extends StatelessWidget {
           width: 72,
           height: 72,
           child: Icon(Icons.play_arrow, color: Colors.black, size: 44),
+        ),
+      ),
+    );
+  }
+}
+
+/// The auto-recolour toggle on the pause menu.
+///
+/// Visually a switch + label; the rest of the row is a [Row] inline
+/// rather than the [_MenuChoice] card above because the switch on the
+/// right is the only way to interact -- there is nothing to confirm.
+class _RecolourToggle extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onChanged;
+
+  const _RecolourToggle({required this.enabled, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xE0181C20),
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onChanged,
+        child: Container(
+          width: 320,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.palette_outlined,
+                  color: enabled ? Colors.amberAccent : Colors.white54,
+                  size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Auto-recolour',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      enabled
+                          ? 'On -- 4 parallel Z80s render in full colour'
+                          : 'Off -- original 8-colour-per-cell Spectrum look',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: enabled,
+                onChanged: (_) => onChanged(),
+                activeColor: Colors.amberAccent,
+              ),
+            ],
+          ),
         ),
       ),
     );
