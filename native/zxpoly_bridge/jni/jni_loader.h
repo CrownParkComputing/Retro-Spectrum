@@ -110,6 +110,11 @@ private:
      *  compiles without <jni.h>. */
     void *find_class(const char *fqcn);
 
+    /** If a JNI exception is pending, capture the message in
+     *  last_error_, clear the exception, return ZXPOLY_ERR_GENERIC.
+     *  Otherwise return ZXPOLY_OK. */
+    int check_exception(const char *context);
+
 private:
     /** Opaque handles. Inside jni_loader.cpp these recover the real
      *  JNI types (JavaVM*, JNIEnv*, jclass, jobject). Hidden in the
@@ -134,6 +139,22 @@ private:
     std::atomic<bool> recolour_{true};
     int sample_rate_ = 44100;
     std::string last_error_;
+
+    /** Cached jfieldID for KeyboardKempstonAndTapeIn.keyboardLines (J),
+     *  obtained via reflection at create_motherboard time. There is no
+     *  public setter on KeyboardKempstonAndTapeIn -- it is driven by
+     *  the Swing UI -- so the bridge writes through reflection. */
+    void *keyboard_lines_field_ = nullptr;
+
+    /** Cached jfieldID for KempstonMouse.kempstonSignals (I). */
+    void *kempston_signals_field_ = nullptr;
+
+    /** ZX-Poly mode runs at 69888 t-states per 50 Hz frame. The
+     *  bridge keeps a running accumulator; on every step_frame call
+     *  we drive Motherboard.step() with the right interrupt flags
+     *  for the slice of t-states being executed. */
+    int tstates_in_frame_ = 0;
+    int frame_chunk_ = 69888 / 50;   // ~1398 t-states per 50 Hz step
 };
 
 } // namespace retro::zxpoly
