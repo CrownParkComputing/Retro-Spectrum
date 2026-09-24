@@ -31,6 +31,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../data/media_entry.dart';
 import '../services/app_log.dart';
+import '../services/saf_bridge.dart';
 
 /// Holds the live state for the WebView-backed emulator session.
 class _EmulatorSessionState extends State<EmulatorSession> {

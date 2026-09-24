@@ -6,7 +6,11 @@
          reading the user's existing game library in place. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- No MANAGE_EXTERNAL_STORAGE: file access is via SAF only.
+         The user picks the games parent folder once through
+         ACTION_OPEN_DOCUMENT_TREE; Android grants a persistable
+         URI permission for that tree, which our native bridge then
+         reads recursively. -->
 
     <application
         android:label="Retro-Spectrum"

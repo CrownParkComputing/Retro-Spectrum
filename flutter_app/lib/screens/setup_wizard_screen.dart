@@ -16,9 +16,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/services/app_prefs.dart';
 import 'package:retro_spectrum/services/library_scanner.dart';
+import 'package:retro_spectrum/services/saf_bridge.dart';
 import 'package:retro_spectrum/services/setup_scan_service.dart';
 import 'package:retro_spectrum/screens/getting_started.dart';
-import 'package:retro_spectrum/services/storage_permission.dart';
 
 class SetupWizardScreen extends StatefulWidget {
   const SetupWizardScreen({super.key, required this.onComplete});
@@ -69,19 +69,11 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 
   Future<void> _scan(String path) async {
-    // The games are read in place, so the scan needs the same access the
-    // emulator will: ask BEFORE walking, because a scan that silently finds
-    // nothing reads as "the app is broken", not "it was never allowed to
-    // look".
-    if (!await StoragePermission.ensure()) {
-      if (!mounted) return;
-      setState(() {
-        _scanned = true;
-        _notice = 'Without "All files access" the app cannot read a games '
-            'folder in place. Grant it and try again.';
-      });
-      return;
-    }
+    // No permission gate any more: the folder came from the system
+    // picker (SAF on Android, a plain directory on Linux), so access
+    // is already scoped to the picked subtree. The scan walks that
+    // subtree via the SAF bridge on Android, Directory.listSync on
+    // Linux.
     if (!mounted) return;
     setState(() {
       _busy = true;
@@ -98,14 +90,14 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 
   Future<void> _pick() async {
-    if (!await StoragePermission.ensure()) {
-      if (!mounted) return;
-      setState(() => _notice =
-          'Without "All files access" the app cannot read a games folder '
-          'in place. Grant it and try again.');
-      return;
-    }
-    final chosen = await FilePicker.platform.getDirectoryPath();
+    // Open the system folder picker. On Android this is
+    // ACTION_OPEN_DOCUMENT_TREE -- the user picks a parent
+    // folder, Android grants a persistable URI permission for the
+    // whole subtree, and the SAF bridge walks it. No
+    // MANAGE_EXTERNAL_STORAGE; no broad legacy permission.
+    final chosen = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Pick your Spectrum games folder',
+    );
     if (chosen != null) await _scan(chosen);
   }
 

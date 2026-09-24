@@ -15,6 +15,7 @@ import 'dart:io';
 
 import 'package:retro_spectrum/data/media_entry.dart';
 import 'package:retro_spectrum/services/library_scanner.dart';
+import 'package:retro_spectrum/services/saf_bridge.dart';
 
 class ScanResult {
   final String folderPath;
@@ -63,24 +64,47 @@ class SetupScanService {
     return null;
   }
 
-  /// Probe a folder for BIOS + game files. BIOS candidates = saturn*.bin
+  /// Probe a folder for game files.
+  ///
+  /// On Android the folder came from the system file picker
+  /// (ACTION_OPEN_DOCUMENT_TREE) and is an SAF tree URI. The native
+  /// bridge walks the tree and we just turn its entries into MediaEntry
+  /// records. On Linux it's a plain directory path and Directory.list
+  /// does the work.
   static Future<ScanResult> scan(String folderPath) async {
     final games = <MediaEntry>[];
 
+    if (SafBridge.isRelevant && folderPath.startsWith('content://')) {
+      // SAF path: walk via the native bridge.
+      await SafBridge.setTreeUri(folderPath);
+      final entries = await SafBridge.walkTree();
+      for (final e in entries) {
+        if (e.isDirectory) continue;
+        final name = e.name.toLowerCase();
+        final ext = name.split('.').last;
+        if (!MediaFormat.fromExtension(ext).isSupported) continue;
+        if (e.size <= 0) continue;
+        games.add(MediaEntry(
+          displayName: _displayName(e.name),
+          path: e.uri,
+          format: MediaFormat.fromExtension(ext),
+          baseName: _basename(e.name),
+          bezelKey: LibraryScanner.normalizeBezelKey(e.name),
+          recolour: true,
+        ));
+      }
+      return ScanResult(folderPath: folderPath, games: _dedup(games));
+    }
+
+    // Plain filesystem path: Linux, macOS, or Android legacy.
     final dir = Directory(folderPath);
     if (!dir.existsSync()) {
       return ScanResult(folderPath: folderPath, games: const []);
     }
-
-    // Scan recursively for BIOS + game files
     await for (final entity in dir.list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
       final name = entity.path.toLowerCase();
       final size = await entity.length();
-
-      // What counts as a title is MediaFormat's business, not a second
-      // list here -- the two drifting apart is how a format becomes
-      // launchable from the library but invisible to setup.
       final ext = name.split('.').last;
       if (MediaFormat.fromExtension(ext).isSupported) {
         if (size > 0) {
@@ -90,11 +114,11 @@ class SetupScanService {
             format: MediaFormat.fromExtension(ext),
             baseName: _basename(entity.path),
             bezelKey: LibraryScanner.normalizeBezelKey(entity.path),
+            recolour: true,
           ));
         }
       }
     }
-
     return ScanResult(folderPath: folderPath, games: _dedup(games));
   }
 
