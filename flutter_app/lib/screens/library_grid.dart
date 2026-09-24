@@ -13,6 +13,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/media_entry.dart';
+import '../services/app_prefs.dart';
 import '../services/library_scanner.dart';
 import '../widgets/media_card.dart';
 
@@ -97,7 +98,11 @@ class _LibraryGridState extends State<LibraryGrid> {
     // The scan is fast on a real device but uses sync IO, so we hop to a
     // microtask rather than blocking a frame.
     await Future<void>.microtask(() {});
-    final raw = await LibraryScanner.scan(path);
+    // Load the per-game recolour map on the UI thread before the scan
+    // kicks off. The scan itself is sync inside an isolate, so any
+    // `await` inside `scanSync` would be illegal there.
+    final recolourByPath = await AppPrefs.allRecolour();
+    final raw = await LibraryScanner.scan(path, recolourByPath: recolourByPath);
     final result = LibraryScanResult.dedup(raw);
     if (!mounted) return;
     setState(() {

@@ -136,4 +136,26 @@ class AppPrefs {
     }
     await _prefs!.setString(_recolourKey, jsonEncode(current));
   }
+
+  /// Full recolour map for the scanner. Every entry that is OFF lives
+  /// in the map; entries that are not in the map default to true.
+  /// Loaded on the UI thread before kicking off [LibraryScanner.scan],
+  /// so the synchronous walk inside the isolate can stamp each entry
+  /// without `await`-ing.
+  static Future<Map<String, bool>> allRecolour() async {
+    final raw = _prefs!.getString(_recolourKey);
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      final out = <String, bool>{};
+      decoded.forEach((key, value) {
+        if (key is! String || value is! bool) return;
+        out[key] = value;
+      });
+      return out;
+    } catch (_) {
+      return const {};
+    }
+  }
 }

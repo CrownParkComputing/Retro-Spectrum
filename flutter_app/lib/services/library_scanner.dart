@@ -139,11 +139,22 @@ class LibraryScanner {
   /// SD card, and on the UI isolate every busy moment of the card was a
   /// dropped frame -- the stall class the Amiga live release taught us to
   /// move off the UI thread entirely.
-  static Future<LibraryScanResult> scan(String directoryPath) =>
-      Isolate.run(() => scanSync(directoryPath));
+  ///
+  /// [recolourByPath] is the per-game recolour map loaded on the UI
+  /// thread before the scan kicks off, so the synchronous walk can
+  /// stamp each entry with its persisted toggle without `await`-ing
+  /// inside the isolate (which would not be a Dart `async` context).
+  static Future<LibraryScanResult> scan(
+    String directoryPath, {
+    required Map<String, bool> recolourByPath,
+  }) =>
+      Isolate.run(() => scanSync(directoryPath, recolourByPath));
 
   /// The walk itself, synchronous, for the isolate (and for tests).
-  static LibraryScanResult scanSync(String directoryPath) {
+  static LibraryScanResult scanSync(
+    String directoryPath,
+    Map<String, bool> recolourByPath,
+  ) {
     final dir = Directory(directoryPath);
     if (!dir.existsSync()) return LibraryScanResult.empty;
 
@@ -168,10 +179,10 @@ class LibraryScanner {
         format: MediaFormat.fromExtension(ext),
         baseName: baseName,
         bezelKey: normalizeBezelKey(displayName),
-        // AppPrefs.getRecolour returns true by default; reading it
-        // here keeps the toggle sticky across re-scans so the same
-        // game launches the way the user left it.
-        recolour: await AppPrefs.getRecolour(f.path),
+        // The recolour map is loaded on the UI thread before the scan
+        // kicks off; entries default to true when the user has not
+        // explicitly turned the toggle off for that path.
+        recolour: recolourByPath[f.path] ?? true,
       ));
     }
     return LibraryScanResult(entries: entries, unreadableCount: unreadable);

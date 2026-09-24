@@ -10,7 +10,7 @@ set(BINARY_NAME "retro_spectrum")
 set(APPLICATION_ID "com.crownpark.retro_spectrum")
 
 set(SPECCY_CORE_LIBRARY
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../native/speccy_core/linux/out/libspeccycore.so"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../native/zxpoly_bridge/linux/out/libzxpolycore.so"
   CACHE FILEPATH "Path to the ZX Spectrum shared core")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
@@ -103,7 +103,7 @@ if(EXISTS "${SPECCY_CORE_LIBRARY}")
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime)
 else()
   message(FATAL_ERROR
-    "Spectrum core not found at ${SPECCY_CORE_LIBRARY}; run native/speccy_core/linux/check-core.sh first")
+    "Spectrum core not found at ${SPECCY_CORE_LIBRARY}; run native/zxpoly_bridge/linux/check-bridge.sh first")
 endif()
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
