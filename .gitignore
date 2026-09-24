@@ -21,3 +21,6 @@ flutter_app/.dart_tool/
 *.zxp
 *.trd
 *.scl
+core.*
+hs_err_pid*.log
+*.dmp

@@ -100,7 +100,7 @@ typedef _StrHandleDart = ffi.Pointer<Utf8> Function();
 typedef _FbHandleNative = ffi.Pointer<ffi.Uint32> Function(ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>);
 typedef _FbHandleDart = ffi.Pointer<ffi.Uint32> Function(ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>);
 
-/// Low-level bindings to libzxpolycore.{so,dylib}.
+/// Low-level bindings to libemulator_bridge.{so,dylib}.
 class ZxpolyCoreBindings {
   final DynamicLibrary _lib;
 
@@ -109,9 +109,9 @@ class ZxpolyCoreBindings {
   factory ZxpolyCoreBindings.load({String? libraryPath}) {
     final DynamicLibrary lib;
     if (Platform.isLinux) {
-      lib = DynamicLibrary.open(libraryPath ?? 'libzxpolycore.so');
+      lib = DynamicLibrary.open(libraryPath ?? 'libemulator_bridge.so');
     } else if (Platform.isAndroid) {
-      lib = DynamicLibrary.open(libraryPath ?? 'libzxpolycore.so');
+      lib = DynamicLibrary.open(libraryPath ?? 'libemulator_bridge.so');
     } else if (Platform.isIOS) {
       lib = libraryPath != null
           ? DynamicLibrary.open(libraryPath)

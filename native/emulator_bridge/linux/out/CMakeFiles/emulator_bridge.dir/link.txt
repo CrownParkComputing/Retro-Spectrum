@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -shared -Wl,--dependency-file=CMakeFiles/emulator_bridge.dir/link.d -Wl,-soname,libemulator_bridge.so -o libemulator_bridge.so "CMakeFiles/emulator_bridge.dir/home/jon/StudioProjects/Retro-Spectrum/native/emulator_bridge/bridge/zesarux_bridge.cpp.o"

@@ -163,7 +163,7 @@ class _ErrorScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'Failed to load libzxpolycore:\n$message',
+            'Failed to load libemulator_bridge:\n$message',
             style: const TextStyle(color: Colors.redAccent),
             textAlign: TextAlign.center,
           ),

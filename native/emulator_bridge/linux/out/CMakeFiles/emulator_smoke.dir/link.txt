@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/emulator_smoke.dir/link.d CMakeFiles/emulator_smoke.dir/emulator_smoke.cpp.o -o emulator_smoke  -Wl,-rpath,/home/jon/StudioProjects/Retro-Spectrum/native/emulator_bridge/linux/out libemulator_bridge.so
