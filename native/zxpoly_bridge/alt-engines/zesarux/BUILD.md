@@ -70,19 +70,51 @@ DISPLAY=:1 ./zesarux --machine TBBlue --ao null
   output. The boot ROM executed and the .tap loader was processing
   tape bytes when the test timeout fired.
 
-* **ZX Spectrum Next** — `--machine TBBlue --snap
-  ~/Downloads/nexthexagon.nex` ran for 10s without crash, produced
-  24 MB of raw framebuffer output (the Next renders at higher
-  resolution than 48k). The .nex was loaded as a snapshot, the
-  Next hardware initialised, and the game was running when the
-  test timeout fired.
+* **ZX Spectrum Next, fast-boot mode** — `--machine TBBlue
+  --tbblue-fast-boot-mode --snap ~/Downloads/nexthexagon.nex` ran
+  for 8s without crash, produced 19 MB of raw framebuffer output.
+  ZEsarUX's `--tbblue-fast-boot-mode` flag boots TBBlue straight
+  into a 48k-style ROM with the Next features (except divmmc)
+  enabled -- the full Next boot ROM (which is a copyrighted
+  download, not shipped with ZEsarUX) is needed for a *real*
+  Next boot, but for running `.nex` games this flag is what works
+  out of the box.
+
+* **ZX Spectrum Next, default boot** — without `--tbblue-fast-boot-mode`,
+  ZEsarUX tries to execute the full Next boot ROM stub from
+  `tbblue_loader.rom` and immediately segfaults the emulated Z80
+  at PC=0x81a0 with `IM0 IFF--` because the full Next firmware
+  is missing. This is expected without the full ROM.
 
 Both runs use the no-window headless mode (`--vo null --ao null`)
 with `--vofile` dumping raw RGB frames at 2 fps to confirm the
 emulator is actively producing output. Visible window mode
 requires running from a session with X11/Wayland access.
 
-## Recoilour note
+## Running on your display
+
+```sh
+cd /tmp/zesarux/src
+
+# ZX Spectrum 48k -- no extra ROM needed
+./zesarux --machine 48k \
+  --tape $HOME/games/spectrum/Alien8.tap --ao null
+
+# ZX Spectrum Next -- fast-boot lets .nex games run without the
+# full Next boot ROM (which is a separate copyright download).
+./zesarux --machine TBBlue --tbblue-fast-boot-mode \
+  --snap /home/jon/Downloads/nexthexagon.nex --ao null
+
+# Once you have the Next boot ROM saved as
+# ~/.zesaruxroms/tbblue.rom, the default Next boot works:
+./zesarux --machine TBBlue \
+  --snap /home/jon/Downloads/nexthexagon.nex --ao null
+```
+
+`--ao null` silences audio so you don't need ALSA setup. The
+SDL video backend connects to your Wayland session directly.
+
+## Recolour note
 
 The recolour feature the swap was built around is zxpoly-specific.
 On ZEsarUX the Spectrum renders through its original 8-colour-per-
