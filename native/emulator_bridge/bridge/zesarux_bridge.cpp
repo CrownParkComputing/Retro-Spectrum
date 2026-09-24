@@ -73,6 +73,7 @@ struct BridgeState {
 
     std::atomic<bool> running{false};
     std::string last_error_;
+    std::string next_rom;
 };
 
 BridgeState &state() {
@@ -201,6 +202,16 @@ int launch_zesarux() {
     s.vofile_path = std::string(std::getenv("TMPDIR") ?
         std::getenv("TMPDIR") : "/tmp") + "/retro-spectrum-vofile.raw";
 
+    // Next / TBBlue ROM file. Default points at the roms dir
+    // populated via the official Next distribution. Override with
+    // ZXSPECTRUM_NEXT_ROM. ZEsarUX has no auto-search for ROMs;
+    // it must be told explicitly via --romfile on the command line.
+    {
+        const char *rom_env = std::getenv("ZXSPECTRUM_NEXT_ROM");
+        s.next_rom = (rom_env && *rom_env) ? rom_env :
+            "/home/jon/.zesaruxroms/tbblue.rom";
+    }
+
     s.zrcp_port = pick_free_port();
     if (s.zrcp_port <= 0) {
         die("could not pick a free port for ZRCP");
@@ -230,12 +241,29 @@ int launch_zesarux() {
         ::close(pipefd[0]);
         ::close(pipefd[1]);
 
-        // We don't know the machine yet; the bridge sets it via ZRCP.
-        // Use a default of 48k so ZEsarUX has something to do.
+        // We don't know the machine yet; the bridge picks from the
+        // file extension after open_file. But we want the boot ROM
+        // loaded at startup for when we do switch to TBBlue. So:
+        //  - if the user's ZXSPECTRUM_DEFAULT_MACHINE says TBBlue,
+        //    launch that
+        //  - else launch 48k as a safe default
         std::vector<const char *> argv;
+        std::string rom_flag;
+        std::string rom_arg;
+        if (!s.next_rom.empty() && ::access(s.next_rom.c_str(), R_OK) == 0) {
+            rom_flag = "--romfile";
+            rom_arg = s.next_rom;
+        }
+        const char *default_machine_env = std::getenv("ZXSPECTRUM_DEFAULT_MACHINE");
+        std::string default_machine = (default_machine_env && *default_machine_env)
+            ? default_machine_env : "48k";
         argv.push_back(s.zesarux_bin.c_str());
         argv.push_back("--machine");
-        argv.push_back("48k");
+        argv.push_back(default_machine.c_str());
+        if (!rom_flag.empty()) {
+            argv.push_back(rom_flag.c_str());
+            argv.push_back(rom_arg.c_str());
+        }
         argv.push_back("--enable-remoteprotocol");
         argv.push_back("--remoteprotocol-port");
         argv.push_back(std::to_string(s.zrcp_port).c_str());
@@ -286,8 +314,12 @@ int launch_zesarux() {
     // before zrcp_send can, causing every subsequent command to
     // timeout. The bridge owns the socket; all reads happen from
     // zrcp_send under a per-call timeout.
+    //
+    // TBBlue + boot ROM initialisation can take 15+ seconds the
+    // first time around, so we give the handshake a generous
+    // timeout.
     std::string reply;
-    if (zrcp_send("get-memory-pages", &reply, 5000) < 0) {
+    if (zrcp_send("get-memory-pages", &reply, 30000) < 0) {
         die("ZRCP handshake failed: " + reply);
         return ZXPOLY_ERR_GENERIC;
     }
