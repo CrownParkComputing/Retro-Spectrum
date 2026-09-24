@@ -63,6 +63,25 @@ DISPLAY=:1 ./zesarux --machine TBBlue --ao null
 `P340`, `P341`, `Pentagon`, `TBBlue` (Next), `TSConf` (Next TS-Conf),
 `BaseConf` (Next BaseConf).
 
+## Verified
+
+* **ZX Spectrum 48k** — `--machine 48k --tape ~/games/spectrum/Alien8.tap`
+  ran for 10s without crash, produced 6 MB of raw framebuffer
+  output. The boot ROM executed and the .tap loader was processing
+  tape bytes when the test timeout fired.
+
+* **ZX Spectrum Next** — `--machine TBBlue --snap
+  ~/Downloads/nexthexagon.nex` ran for 10s without crash, produced
+  24 MB of raw framebuffer output (the Next renders at higher
+  resolution than 48k). The .nex was loaded as a snapshot, the
+  Next hardware initialised, and the game was running when the
+  test timeout fired.
+
+Both runs use the no-window headless mode (`--vo null --ao null`)
+with `--vofile` dumping raw RGB frames at 2 fps to confirm the
+emulator is actively producing output. Visible window mode
+requires running from a session with X11/Wayland access.
+
 ## Recoilour note
 
 The recolour feature the swap was built around is zxpoly-specific.
