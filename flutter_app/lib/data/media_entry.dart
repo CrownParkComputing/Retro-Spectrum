@@ -18,6 +18,7 @@ enum MediaFormat {
   sna,
   sze,   // SNA Extended -- pre-adapted for ZX-Poly's 4-CPU mode
   zxp,   // ZX-Poly's own packed format
+  nex,   // ZX Spectrum Next native executable
   trd,
   scl,
   zip;
@@ -30,6 +31,7 @@ enum MediaFormat {
         MediaFormat.sna => 'SNA',
         MediaFormat.sze => 'SZE',
         MediaFormat.zxp => 'ZXP',
+        MediaFormat.nex => 'NEX',
         MediaFormat.trd => 'TRD',
         MediaFormat.scl => 'SCL',
         MediaFormat.zip => 'ZIP',
@@ -45,7 +47,8 @@ enum MediaFormat {
         MediaFormat.z80 ||
         MediaFormat.sna ||
         MediaFormat.sze ||
-        MediaFormat.zxp => 'Snapshot',
+        MediaFormat.zxp ||
+        MediaFormat.nex => 'Snapshot',
         MediaFormat.trd || MediaFormat.scl => 'Disk',
         MediaFormat.zip => 'Archive',
         MediaFormat.unknown => 'Unsupported',
@@ -70,6 +73,8 @@ enum MediaFormat {
         return MediaFormat.sze;
       case 'zxp':
         return MediaFormat.zxp;
+      case 'nex':
+        return MediaFormat.nex;
       case 'trd':
         return MediaFormat.trd;
       case 'scl':
