@@ -184,33 +184,16 @@ class _EmulatorSessionState extends State<EmulatorSession> {
         ),
       );
     }
-    return Stack(children: [
-      // The Refract WebView itself. Hidden behind the Flutter
-      // framebuffer surface -- Dart draws the captured PNG instead.
-      // We give it a real on-screen size so the JS engine keeps
-      // running and producing fresh frames.
-      Positioned.fill(
-        child: IgnorePointer(
-          child: WebViewWidget(controller: _controller),
-        ),
-      ),
-      // The Flutter-rendered framebuffer surface. Drawn from
-      // _frameImage which the polling loop fills every 16 ms.
-      Positioned.fill(
-        child: ColoredBox(
-          color: Colors.black,
-          child: _frameImage == null
-              ? const Center(
-                  child: CircularProgressIndicator(),
-                )
-              : RawImage(
-                  image: _frameImage,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.none,
-                ),
-        ),
-      ),
-    ]);
+    // Show the Refract WebView directly. The JS draws to its own canvas
+    // (id="screen") which the WebView composites to the screen surface.
+    // The earlier polling + toDataURL + RawImage approach failed: the
+    // canvas was returning null or empty because WebView on Android
+    // composites the canvas to a texture that the host process can't
+    // re-read with toDataURL once GPU compositing kicks in. Letting the
+    // WebView draw itself sidesteps that entirely. Audio already plays
+    // through the WebView -- the user can hear the .nex running; with
+    // the WebView on screen, they can also see it.
+    return WebViewWidget(controller: _controller);
   }
 }
 
