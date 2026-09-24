@@ -1,3 +1,0 @@
-[submodule "native/zxpoly_bridge/zxpoly"]
-	path = native/zxpoly_bridge/zxpoly
-	url = https://github.com/raydac/zxpoly.git
