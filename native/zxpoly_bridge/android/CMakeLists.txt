@@ -29,6 +29,7 @@ find_package(Threads REQUIRED)
 # audio drain no-ops. The phase 2 commit adds the JNI loader.
 add_library(zxpoly_core SHARED
     ../bridge/zxpoly_bridge.cpp
+    ../jni/jni_loader.cpp
     ../bridge/audio_backend_android.cpp)
 
 # Force the output filename to `libzxpolycore.so` (no underscore between
@@ -37,7 +38,7 @@ add_library(zxpoly_core SHARED
 # a mismatch fails the very first dlopen() in the Flutter app.
 set_target_properties(zxpoly_core PROPERTIES OUTPUT_NAME zxpolycore)
 
-target_include_directories(zxpoly_core PUBLIC ../bridge)
+target_include_directories(zxpoly_core PUBLIC ../bridge ../jni)
 target_link_libraries(zxpoly_core PRIVATE Threads::Threads)
 
 # Engine integration (phase 2):

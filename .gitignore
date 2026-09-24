@@ -17,5 +17,7 @@ flutter_app/.dart_tool/
 *.z80
 *.sna
 *.szx
+*.sze
+*.zxp
 *.trd
 *.scl
