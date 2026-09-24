@@ -133,6 +133,8 @@ class ZxpolyCoreBindings {
       'zxpoly_bridge_set_recolour');
   late final _getRecolour = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
       'zxpoly_bridge_get_recolour');
+  late final _recolourNow = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
+      'zxpoly_bridge_recolour_now');
   late final _start = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
       'zxpoly_bridge_start');
   late final _stop = _lib.lookupFunction<_VoidHandleNative, _VoidHandleDart>(
@@ -227,6 +229,12 @@ class ZxpolyCoreBindings {
   /// is already the full-colour version.
   void setRecolour(bool enabled) => _setRecolour(enabled ? 1 : 0);
   bool getRecolour() => _getRecolour() != 0;
+
+  /// Run the recolour preprocess now -- the Dart UI calls this after
+  /// the .tap loader has populated the screen, since .tap loading is
+  /// multi-second. Returns 0 on success; a negative ZXPOLY_ERR_* code
+  /// on failure. No-op when the toggle is off.
+  int recolourNow() => _recolourNow();
 
   int start() => _start();
 

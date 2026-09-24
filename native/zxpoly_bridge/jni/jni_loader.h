@@ -101,6 +101,14 @@ public:
     int set_recolour(bool enabled);
     bool recolour() const { return recolour_.load(); }
 
+    /** Redistribute the loaded game's standard video memory
+     *  (main CPU's 0x4000..0x5AFF) across the 4 parallel modules'
+     *  video RAMs in ZX-Poly mode. Called by the Dart side after the
+     *  loader has populated the screen -- not synchronously inside
+     *  open_file, because .tap loading takes seconds. Returns 0 on
+     *  success; ZXPOLY_ERR_NOTIMPL until the algorithm lands. */
+    int recolour_preprocess();
+
     const std::string &last_error() const { return last_error_; }
 
 private:

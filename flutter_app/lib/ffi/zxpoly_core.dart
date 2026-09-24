@@ -26,6 +26,12 @@ abstract class ZxpolyCore {
   void setRecolour(bool enabled);
   bool get recolour;
 
+  /// Run the recolour preprocess against the currently-loaded game.
+  /// Called by the UI after a short delay (the .tap loader needs
+  /// seconds to finish populating memory) or in response to an
+  /// explicit user action. No-op when [recolour] is false.
+  int recolourNow();
+
   // Emulation
   String? runFrame();
   void reset();
@@ -120,6 +126,9 @@ class ZxpolyCoreBindingsAdapter implements ZxpolyCore {
 
   @override
   bool get recolour => _bindings.getRecolour();
+
+  @override
+  int recolourNow() => _bindings.recolourNow();
 
   @override
   String? runFrame() => _bindings.runFrame();

@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 
 #if __has_include(<jni.h>)
 #include <jni.h>
@@ -103,10 +104,21 @@ struct CachedMethodIDs {
     jmethodID motherboard_getVideo = nullptr;
     jmethodID motherboard_getBeeper = nullptr;
     jmethodID motherboard_findIoDevice = nullptr;
+    jmethodID motherboard_getModules = nullptr;
+    jmethodID motherboard_resetAndRestoreRom = nullptr;
+
+    jmethodID module_setRomData = nullptr;
+    jmethodID module_readMemory = nullptr;
+    jmethodID module_writeMemory = nullptr;
+    jmethodID module_makeCopyOfZxMemPage = nullptr;
+
+    jmethodID video_makeCopyOfVideoBuffer = nullptr;
+    jmethodID motherboard_findIoDevice = nullptr;
 
     jmethodID video_makeCopyOfVideoBuffer = nullptr;
 
     jmethodID beeper_getSoundPort = nullptr;
+    jmethodID romData_read_file = nullptr;
     jmethodID audioFormat_getSampleRate = nullptr;
     jmethodID audioFormat_getChannels = nullptr;
     jmethodID audioFormat_getSampleSizeInBits = nullptr;
@@ -253,15 +265,68 @@ int JniLoader::create_motherboard(int sample_rate) {
         "Lcom/igormaznitsa/zxpoly/components/timing/TimingProfile;");
     jobject timingProfile = env->GetStaticObjectField(tp_cls, tp_ntsc);
 
-    // RomData built from a 16K zero array -- a placeholder until the
-    // caller supplies a real ROM via set_rom(). Boots to black, but
-    // proves the constructor wires up.
+    // ROM: prefer ZXSPECTRUM_ROM env var, then
+    // ~/games/spectrum/roms/zxspectrum128.rom, then sos48.rom.
+    // Any of those that exists is loaded via RomData.read(File); if none
+    // exist we fall back to a 16K zero ROM so the constructor still
+    // wires up (the JVM-side error is "no boot ROM" rather than a JNI
+    // exception, which the user can act on).
     jclass rd_cls = static_cast<jclass>(cls_rom_data_);
     jmethodID rd_ctor = env->GetMethodID(rd_cls, "<init>",
         "(Ljava/lang/String;[B)V");
-    jbyteArray empty_rom = env->NewByteArray(16384);
-    jstring rom_src = env->NewStringUTF("placeholder://retro-spectrum");
-    jobject rom = env->NewObject(rd_cls, rd_ctor, rom_src, empty_rom);
+    jmethodID rd_read_file = env->GetStaticMethodID(rd_cls, "read",
+        "(Ljava/io/File;)Lcom/igormaznitsa/zxpoly/components/RomData;");
+    methods().romData_read_file = rd_read_file;
+
+    const char *rom_env = std::getenv("ZXSPECTRUM_ROM");
+    const char *rom_candidates[] = {
+        rom_env,
+        "/home/jon/games/spectrum/roms/zxspectrum128.rom",
+        "/home/jon/games/spectrum/roms/sos48.rom",
+    };
+
+    jobject rom = nullptr;
+    jstring rom_src = nullptr;
+    for (const char *path : rom_candidates) {
+        if (!path || !*path) continue;
+        // Probe before handing the path to the JVM -- a missing file
+        // should not throw on the Java side.
+        std::ifstream probe(path);
+        if (!probe.good()) continue;
+        probe.close();
+        jclass file_cls = local_find_class(env, "java/io/File");
+        jmethodID file_ctor = env->GetMethodID(file_cls, "<init>",
+            "(Ljava/lang/String;)V");
+        jstring jpath = env->NewStringUTF(path);
+        jobject file_obj = env->NewObject(file_cls, file_ctor, jpath);
+        rom = env->CallStaticObjectMethod(rd_cls, rd_read_file, file_obj);
+        env->DeleteLocalRef(file_cls);
+        env->DeleteLocalRef(file_obj);
+        env->DeleteLocalRef(jpath);
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+            rom = nullptr;
+            continue;
+        }
+        if (rom) {
+            rom_src = env->NewStringUTF(path);
+            break;
+        }
+    }
+
+    if (!rom) {
+        // No usable ROM file -- fall back to a 16K zero so the JVM at
+        // least constructs. The user will see a black screen and a
+        // JNI-side log message saying which path we tried.
+        jbyteArray empty_rom = env->NewByteArray(16384);
+        rom_src = env->NewStringUTF("placeholder://retro-spectrum (no ROM found)");
+        rom = env->NewObject(rd_cls, rd_ctor, rom_src, empty_rom);
+        env->DeleteLocalRef(empty_rom);
+        last_error_ = "no ROM found: tried ZXSPECTRUM_ROM env, "
+                      "/home/jon/games/spectrum/roms/zxspectrum128.rom, "
+                      "sos48.rom";
+    }
 
     // Bounds(0,0,0,0)
     jclass bounds_cls = local_find_class(env, "java/awt/Rectangle");
@@ -814,6 +879,81 @@ int JniLoader::set_rom(int slot, const uint8_t *data, int size) {
 int JniLoader::set_recolour(bool enabled) {
     recolour_.store(enabled);
     return ZXPOLY_OK;
+}
+
+int JniLoader::recolour_preprocess() {
+#if ZXPOLY_HAS_JNI
+    if (!ready_.load() || !motherboard_) return ZXPOLY_ERR_GENERIC;
+    if (!recolour_.load()) return ZXPOLY_OK;   // toggle off -> no-op
+
+    JNIEnv *env = static_cast<JNIEnv *>(env_);
+
+    // The ZX-Poly mode renders the same screen data on all 4 parallel
+    // CPUs in lockstep, so each module's video RAM needs the same
+    // pixel+attribute bytes. Read the main CPU's video memory via
+    // ZxPolyModule.makeCopyOfZxMemPage(5) (the 16K page at 0x4000 which
+    // holds the screen) and write it into every module's heap.
+    jmethodID makeCopy = env->GetMethodID(
+        static_cast<jclass>(cls_motherboard_),
+        "getModules", "()[Lcom/igormaznitsa/zxpoly/components/ZxPolyModule;");
+    if (!makeCopy) return ZXPOLY_ERR_NOTIMPL;
+    jobjectArray modules = static_cast<jobjectArray>(
+        env->CallObjectMethod(static_cast<jobject>(motherboard_), makeCopy));
+    if (!modules || env->ExceptionCheck()) {
+        check_exception("getModules");
+        return ZXPOLY_ERR_GENERIC;
+    }
+    const jsize n_modules = env->GetArrayLength(modules);
+    if (n_modules < 1) {
+        env->DeleteLocalRef(modules);
+        return ZXPOLY_ERR_GENERIC;
+    }
+
+    // Page 5 = 0x4000..0x7FFF, which on a 48K Spectrum is the screen
+    // + attribute memory. On a 128K Spectrum with paged memory, the
+    // page index depends on port 7FFD; we read whichever is currently
+    // mapped into 0x4000.
+    jclass module_cls = static_cast<jclass>(
+        env->GetObjectClass(env->GetObjectArrayElement(modules, 0)));
+    jmethodID copy_page = env->GetMethodID(module_cls,
+        "makeCopyOfZxMemPage", "(I)[B");
+    if (!copy_page) {
+        check_exception("makeCopyOfZxMemPage");
+        env->DeleteLocalRef(modules);
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jbyteArray screen = static_cast<jbyteArray>(env->CallObjectMethod(
+        env->GetObjectArrayElement(modules, 0), copy_page, 5));
+    if (!screen || env->ExceptionCheck()) {
+        check_exception("makeCopyOfZxMemPage(5)");
+        env->DeleteLocalRef(modules);
+        return ZXPOLY_ERR_GENERIC;
+    }
+
+    // Mirror into every module's video memory. ZX-Poly lockstep means
+    // each CPU renders the same image with its own attribute, and the
+    // framebuffer combines the four parallel outputs into a single
+    // 4-bit-per-pixel image. Phase 2.4 / 2.5 replace this with the
+    // real per-channel redistribution; today this proves the wiring.
+    jmethodID write_heap = env->GetMethodID(module_cls,
+        "writeHeapPage", "(I[B)V");
+    for (jsize i = 0; i < n_modules; i++) {
+        jobject module = env->GetObjectArrayElement(modules, i);
+        env->CallVoidMethod(module, write_heap, 5, screen);
+        env->DeleteLocalRef(module);
+        if (env->ExceptionCheck()) {
+            check_exception("writeHeapPage(5)");
+            break;
+        }
+    }
+
+    env->DeleteLocalRef(modules);
+    env->DeleteLocalRef(screen);
+    env->DeleteLocalRef(module_cls);
+    return ZXPOLY_OK;
+#else
+    return ZXPOLY_ERR_NOTIMPL;
+#endif
 }
 
 #if ZXPOLY_HAS_JNI

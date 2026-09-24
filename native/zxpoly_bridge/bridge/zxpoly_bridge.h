@@ -74,6 +74,14 @@ int  zxpoly_bridge_set_font(const uint8_t *data, int32_t size);
 int  zxpoly_bridge_set_recolour(int enabled);
 int  zxpoly_bridge_get_recolour(void);
 
+/* Run the recolour preprocess against the currently-loaded game
+ * state. The Dart UI calls this after the loader has populated the
+ * screen -- .tap loading is multi-second and the recolour algorithm
+ * needs the loaded memory map. Returns 0 on success or a negative
+ * ZXPOLY_ERR_*. Until the JNI side is implemented, returns
+ * ZXPOLY_ERR_NOTIMPL. */
+int  zxpoly_bridge_recolour_now(void);
+
 /* ---- Frame / emulation ----------------------------------------------- */
 
 /* Advance one frame. Returns null on success, otherwise a static
