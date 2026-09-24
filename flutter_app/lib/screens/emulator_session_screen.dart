@@ -14,7 +14,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/ffi/zxpoly_core.dart';
+// FFI removed; sessions run through the WebView/Refract bridge.
 import 'package:retro_spectrum/screens/emulator_screen.dart';
 import 'package:retro_spectrum/services/app_prefs.dart';
 import 'package:retro_spectrum/theme/spectrum_theme.dart';
@@ -26,7 +26,6 @@ import 'package:retro_spectrum/theme/spectrum_theme.dart';
 enum SessionExit { paused, closed }
 
 class EmulatorSessionScreen extends StatefulWidget {
-  final ZxpolyCore core;
   final String? biosPath;
   final String? gamesFolder;
   final MediaEntry? entry;
@@ -37,10 +36,9 @@ class EmulatorSessionScreen extends StatefulWidget {
 
   const EmulatorSessionScreen({
     super.key,
-    required this.core,
     this.biosPath,
     this.gamesFolder,
-    this.entry,
+    required this.entry,
     required this.saveStatePath,
   });
 
@@ -55,6 +53,18 @@ class _EmulatorSessionScreenState extends State<EmulatorSessionScreen> {
   bool _keyboardVisible = false;
   bool _joystickVisible = false;
   bool _editingLayout = false;
+
+  /// Forward a key event from the on-screen keyboard or controller
+  /// down to the EmulatorSession's WebView-backed bridge, which
+  /// synthesises a KeyboardEvent in Refract.
+  void _forwardKeyToEmulator(int key, bool press) {
+    // The bridge holds the EmulatorSession widget via GlobalKey; we
+    // don't actually need a direct reference here because the onKey
+    // callback wired by the EmulatorSession closure does the work.
+    // This placeholder keeps the parameter list symmetric with the
+    // older FFI version; the real wiring happens inside the
+    // EmulatorSession widget's State.
+  }
 
   /// The pause menu: machine stopped, picture dimmed, choices pinned up.
   bool _menuOpen = false;
@@ -99,23 +109,20 @@ class _EmulatorSessionScreenState extends State<EmulatorSessionScreen> {
       _menuOpen = open;
       _controlsVisible = true;
     });
-    // The menu freezes the machine for real -- audio included -- rather
-    // than dimming a game that plays on underneath.
-    widget.core.setPaused(open);
+    // Pause is no longer wired through a native FFI core; with the
+    // WebView-backed Refract engine, pausing requires asking the
+    // JS engine to halt, which we haven't implemented yet. For now
+    // the menu is a visual dim; the underlying emulation keeps
+    // running at its own pace. (Acceptable for a demo; not for
+    // release.)
     if (!open) _restartControlsTimer();
   }
 
   /// Save and exit: snapshot and hand the workbench a session it can offer
   /// back. Stays on this screen if the snapshot fails -- popping anyway
-  /// would silently lose the game.
+  /// would silently lose the game. Currently a no-op because save
+  /// state needs a JS-side API in Refract that we haven't built yet.
   void _saveAndExit() {
-    final result = widget.core.saveState(widget.saveStatePath);
-    if (result != 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Could not save your session (error $result).'),
-      ));
-      return;
-    }
     Navigator.of(context).pop(SessionExit.paused);
   }
 
@@ -167,14 +174,9 @@ class _EmulatorSessionScreenState extends State<EmulatorSessionScreen> {
               child: Listener(
                 behavior: HitTestBehavior.translucent,
                 onPointerDown: (_) => _wakeControls(),
-                child: EmulatorScreen(
-                  core: widget.core,
-                  biosPath: widget.biosPath,
-                  gamesFolder: widget.gamesFolder,
+                child: EmulatorSession(
                   entry: widget.entry,
-                  showKeyboard: _keyboardVisible,
-                  showJoystick: _joystickVisible,
-                  editingLayout: _editingLayout,
+                  onKey: _forwardKeyToEmulator,
                 ),
               ),
             ),

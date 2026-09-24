@@ -7,11 +7,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/data/spectrum_keys.dart';
-import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 
 class InputSettingsScreen extends StatefulWidget {
-  final ZxpolyCore core;
-  const InputSettingsScreen({super.key, required this.core});
+  const InputSettingsScreen({super.key});
 
   @override
   State<InputSettingsScreen> createState() => _InputSettingsScreenState();

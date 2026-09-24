@@ -6,11 +6,10 @@
 // engine exposes sound on/off via the option registry).
 
 import 'package:flutter/material.dart';
-import 'package:retro_spectrum/ffi/zxpoly_core.dart';
+// FFI removed; settings are no-ops until the WebView JS-side API is built.
 
 class AudioSettingsScreen extends StatefulWidget {
-  final ZxpolyCore core;
-  const AudioSettingsScreen({super.key, required this.core});
+  const AudioSettingsScreen({super.key});
 
   @override
   State<AudioSettingsScreen> createState() => _AudioSettingsScreenState();
@@ -22,11 +21,11 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _sound = widget.core.getOptionBool('sound', true);
+    _sound = true;
   }
 
   void _setSound(bool v) {
-    widget.core.setOptionBool('sound', v);
+    // stubbed
     setState(() => _sound = v);
   }
 
@@ -50,7 +49,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
         const _Section('Live level'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: _AudioLevelBar(level: widget.core.audioLevel, muted: !_sound),
+          child: _AudioLevelBar(level: 0, muted: !_sound),
         ),
         const SizedBox(height: 8),
         const Text(
@@ -62,7 +61,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
         ),
         const SizedBox(height: 24),
         const _Section('Bridge status'),
-        Text('FPS: ${widget.core.fpsX100 / 100.0}',
+        Text('FPS: ${0 / 100.0}',
             style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
       ]),
     );

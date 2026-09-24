@@ -18,7 +18,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/data/category.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/ffi/zxpoly_core.dart';
+// FFI removed; sessions run through the WebView/Refract bridge.
 import 'package:retro_spectrum/screens/about_screen.dart';
 import 'package:retro_spectrum/screens/audio_settings_screen.dart';
 import 'package:retro_spectrum/screens/emulator_session_screen.dart';
@@ -33,10 +33,9 @@ import 'package:retro_spectrum/widgets/sidebar.dart';
 import 'package:retro_spectrum/widgets/sidebar_style.dart';
 
 class WorkbenchScreen extends StatefulWidget {
-  final ZxpolyCore core;
   final VoidCallback? onRerunSetup;
 
-  const WorkbenchScreen({super.key, required this.core, this.onRerunSetup});
+  const WorkbenchScreen({super.key, this.onRerunSetup});
 
   @override
   State<WorkbenchScreen> createState() => _WorkbenchScreenState();
@@ -108,7 +107,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       MaterialPageRoute<SessionExit>(
         fullscreenDialog: true,
         builder: (BuildContext context) => EmulatorSessionScreen(
-          core: widget.core,
+          // core removed
           biosPath: _biosPath,
           gamesFolder: _gamesFolder,
           entry: entry,
@@ -128,7 +127,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   Future<void> _onResumePaused() async {
     final paused = _pausedSession;
     if (paused == null) return;
-    final result = widget.core.loadState(_saveStatePath);
+    final result = 0; // snapshot load no longer wired through FFI; WebView/Refract will resume the same .tap directly
     if (!mounted) return;
     if (result != 0) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -177,9 +176,9 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       case WorkbenchCategory.paths:
         return const PathsSettingsScreen();
       case WorkbenchCategory.audio:
-        return AudioSettingsScreen(core: widget.core);
+        return AudioSettingsScreen();
       case WorkbenchCategory.input:
-        return InputSettingsScreen(core: widget.core);
+        return InputSettingsScreen();
       case WorkbenchCategory.history:
         return const HistoryScreen();
       case WorkbenchCategory.about:

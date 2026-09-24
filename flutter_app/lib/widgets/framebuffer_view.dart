@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 
 class FramebufferView extends StatefulWidget {
-  final ZxpolyCore core;
+  final Object? core;
   final Duration pollInterval;
   /// Draws the PANEL's redraw rate over the picture.
   ///

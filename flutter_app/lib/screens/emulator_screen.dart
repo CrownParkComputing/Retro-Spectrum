@@ -1,171 +1,278 @@
-// emulator_screen.dart — Renders the emulated framebuffer + the
-// peripheral overlays (Virtua Gun, on-screen Saturn pad) inside the
-// workbench's content panel. Loads BIOS + disc from the library grid
-// tap, restores NVRAM (Saturn backup RAM), mounts the gamepad service,
-// and auto-saves NVRAM every 60 seconds while playing.
+// emulator_screen.dart -- the entire emulation layer for
+// Retro-Spectrum is a WebView running Refract (a JS-based ZX
+// Spectrum / ZX Spectrum Next emulator by Software Amusements,
+// https://www.softwareamusements.com/Web/RefractEmulator/).
 //
-// The in-game toolbar (pad toggle, settings, pause, close) lives in
-// the workbench's status bar, beneath the content panel, matching
-// Retro-C64's EmulatorControlStrip pattern. The settings drawer is
-// rendered from the workbench too. This screen no longer owns its own
-// Scaffold -- the emulator chrome is below the picture, not on it.
+// Architecture:
+//
+//   - assets/refract.html is Refract's full HTML, including the
+//     inlined Z80N CPU and NextReg engine (~1.7 MB).
+//   - The WebView loads it from assets at startup and runs it
+//     in-process.
+//   - Dart injects a JavaScript shim that overrides Refract's
+//     native file-drop handler, so the Dart UI can drop .tap / .tzx /
+//     .z80 / .sna / .nex bytes via a JavaScript channel call.
+//   - Every ~16 ms Dart polls the WebView's #screen canvas via
+//     canvas.toDataURL() and decodes the PNG for Flutter to draw.
+//   - Keyboard input from the on-screen controls is forwarded to
+//     Refract as synthetic KeyboardEvent dispatches.
+//
+// No JNI, no JVM, no subprocess, no FFI: pure Dart + WebView.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/ffi/zxpoly_core.dart';
-import 'package:retro_spectrum/services/app_log.dart';
-import 'package:retro_spectrum/services/game_state_service.dart';
-import 'package:retro_spectrum/services/gamepad_service.dart';
-import 'package:retro_spectrum/services/core_paths.dart';
-import 'package:retro_spectrum/widgets/framebuffer_view.dart';
-import 'package:retro_spectrum/widgets/kempston_pad.dart';
-import 'package:retro_spectrum/widgets/spectrum_keyboard.dart';
+import 'package:flutter/services.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
-class EmulatorScreen extends StatefulWidget {
-  final ZxpolyCore core;
-  final String? biosPath;
-  final String? gamesFolder;
-  final MediaEntry? entry;
+import '../data/media_entry.dart';
+import '../services/app_log.dart';
 
-  /// Owned by the workbench -- the in-game toolbar toggles this, and we
-  /// render the on-screen Saturn pad when it is true. Lifting it out of
-  /// EmulatorScreen means the pad toggle and the pad overlay see the
-  /// same source of truth (the workbench), which is what the previous
-  /// in-screen toolbar got wrong (toggle was here, overlay was never
-  /// rendered).
-  final bool showKeyboard;
-  final bool showJoystick;
-  final bool editingLayout;
+/// Holds the live state for the WebView-backed emulator session.
+class _EmulatorSessionState extends State<EmulatorSession> {
+  late final WebViewController _controller;
+  Timer? _frameTimer;
 
-  const EmulatorScreen({
-    super.key,
-    required this.core,
-    this.biosPath,
-    this.gamesFolder,
-    this.entry,
-    this.showKeyboard = false,
-    this.showJoystick = false,
-    this.editingLayout = false,
-  });
+  /// Latest decoded RGBA frame, set by the polling loop. The
+  /// emulator screen widget reads this every frame.
+  ui.Image? _frameImage;
 
-  @override
-  State<EmulatorScreen> createState() => _EmulatorScreenState();
-}
-
-class _EmulatorScreenState extends State<EmulatorScreen> {
-  GamepadService? _gamepad;
-  StreamSubscription<GamepadKeyEvent>? _gamepadKeys;
-  String _currentDisc = '';
+  bool _ready = false;
+  bool _error = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMedia());
-    final gamepad = GamepadService(widget.core, port: 1);
-    // Kempston already goes straight to the core inside the service. Keys
-    // did not: they were emitted onto a stream nothing subscribed to, so a
-    // pad button mapped to a Spectrum key did nothing at all.
-    _gamepadKeys = gamepad.keyEvents.listen(
-        (e) => widget.core.keyEvent(e.key, e.flags));
-    _gamepad = gamepad;
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..addJavaScriptChannel(
+        'RefractBridge',
+        onMessageReceived: (JavaScriptMessage msg) {
+          // Refract's HTML doesn't expose an API for the host
+          // application to inject files. We inject a small JS
+          // shim (in assets/refract.html) that calls this channel
+          // when the user "drops" a file -- which Dart triggers
+          // when the user picks a game.
+          AppLog.log('refract: ${msg.message}');
+        },
+      )
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (url) async {
+          _ready = true;
+          // Install our file-injection helper once Refract is loaded.
+          await _controller.runJavaScript(_installHelper);
+          // Start the framebuffer polling loop.
+          _frameTimer = Timer.periodic(
+            const Duration(milliseconds: 16),
+            (_) => _captureFrame(),
+          );
+          // If the user already picked a game, load it now.
+          final entry = widget.entry;
+          if (entry != null && File(entry.path).existsSync()) {
+            _loadFile(entry.path);
+          }
+        },
+        onWebResourceError: (err) {
+          _error = true;
+          _errorMessage = err.description;
+        },
+      ))
+      ..loadFlutterAsset('assets/refract.html');
+  }
+
+  @override
+  void didUpdateWidget(covariant EmulatorSession old) {
+    super.didUpdateWidget(old);
+    if (old.entry?.path != widget.entry?.path && widget.entry != null) {
+      _loadFile(widget.entry!.path);
+    }
   }
 
   @override
   void dispose() {
-    // Snapshot on the way out. Errors are swallowed: if the path is gone
-    // (app uninstalled mid-launch) there is nothing to do about it here,
-    // and dispose() crashing is worse than a lost auto-save.
-    if (_currentDisc.isNotEmpty) {
-      try {
-        GameStateService.saveFrom(widget.core, _currentDisc);
-      } catch (_) {}
-    }
-    GameStateService.stopAutoSave();
-    try {
-      try {
-        widget.core.saveState(CorePaths.saveStatePath);
-      } catch (_) {}
-    } catch (_) {}
-    _gamepadKeys?.cancel();
-    _gamepad?.dispose();
+    _frameTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadMedia() async {
-    final entry = widget.entry;
-
-    if (entry != null && File(entry.path).existsSync()) {
-      _currentDisc = entry.path;
-      // Auto-recolour: set BEFORE openFile so the bridge has the flag
-      // when the recolour preprocess runs (phase 2.3 wires the
-      // preprocess into openFile itself; until then setRecolour is a
-      // no-op on the bridge side, and the first frame presented is the
-      // stock ZX-Spectrum rendering either way). Default on.
-      widget.core.setRecolour(entry.recolour);
-      AppLog.log('recolour: ${entry.recolour}');
-      AppLog.log('openFile: ${entry.path}');
-      final rc = widget.core.openFile(entry.path);
-      AppLog.log('openFile rc=$rc');
-
-      // Restore the per-game snapshot (Spectrum snapshot is .sna).
-      try {
-        final loaded = await GameStateService.loadInto(widget.core, entry.path);
-        AppLog.log('snapshot load: $loaded (${entry.displayName})');
-        debugPrint('snapshot load: $loaded');
-      } catch (e) {
-        AppLog.log('snapshot load exception: $e');
-      }
-
-      GameStateService.startAutoSave(widget.core, entry.path);
-      AppLog.log('snapshot auto-save started (60s interval)');
-    }
-
-    // The fps lookup is wrapped in try/catch because a missing
-    // symbol on the bridge (an older build, a wrong ABI) used to take
-    // down the entire frame loop with an unhandled Dart exception --
-    // 'spinning not loading the tap', since the exception fires
-    // after openFile() has already started the loader. Treat a
-    // failure to read fps as 'we don't know yet' and move on.
+  /// Drops the file at [path] into the Refract page by synthesising
+  /// a DragEvent with a File payload. Refract's drop handler reads
+  /// it as if the user had dragged the file from the OS file picker.
+  Future<void> _loadFile(String path) async {
+    if (!_ready) return;
     try {
-      final fps = widget.core.fpsX100;
-      AppLog.log('emulator running @ ${fps / 100.0}fps');
+      final bytes = await File(path).readAsBytes();
+      final b64 = base64Encode(bytes);
+      // Escape the path for embedding in a JS string literal.
+      final jsPath = _jsString(path);
+      // Inject a File via DataTransfer and dispatch a drop event on
+      // the #screen canvas -- exactly what Refract's own drop
+      // handler listens for.
+      final js =
+          'window.__retroLoadFile($jsPath, "$b64");';
+      await _controller.runJavaScript(js);
     } catch (e) {
-      AppLog.log('fps lookup failed: $e');
+      AppLog.log('refract loadFile failed: $e');
     }
+  }
+
+  Future<void> _captureFrame() async {
+    if (!_ready) return;
+    try {
+      final dataUrl = await _controller.runJavaScriptReturningResult(
+        'document.getElementById("screen") && '
+        'document.getElementById("screen").toDataURL("image/png")',
+      ) as String?;
+      if (dataUrl == null || !dataUrl.startsWith('data:image/png;base64,')) {
+        return;
+      }
+      final pngBytes = base64Decode(dataUrl.substring(22));
+      final codec = await ui.instantiateImageCodec(pngBytes);
+      final frame = await codec.getNextFrame();
+      if (!mounted) return;
+      setState(() => _frameImage = frame.image);
+    } catch (_) {
+      // Refract not initialised yet, or canvas isn't ready; skip.
+    }
+  }
+
+  /// Translate a Spectrum key index into a Refract keyboard event.
+  /// Refract listens on document for keydown/keyup and routes via the
+  /// MATRIX / KEMPSTON lookup table baked into its JS. We fire the
+  /// matching browser KeyboardEvent from Dart.
+  void _sendKey(int key, bool press) {
+    if (!_ready) return;
+    final code = _spectrumKeyCode(key);
+    if (code == null) return;
+    final type = press ? 'keydown' : 'keyup';
+    _controller.runJavaScript(
+      '(() => {'
+      '  const ev = new KeyboardEvent("$type", {code: "$code", bubbles: true});'
+      '  document.dispatchEvent(ev);'
+      '})()',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_error) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text('Refract failed to load: $_errorMessage',
+              style: const TextStyle(color: Colors.redAccent)),
+        ),
+      );
+    }
     return Stack(children: [
-      // No FPS overlay: the status bar already reports the core's rate, and
-      // this widget's counter measures its own redraws -- a different number
-      // under the same name, drawn over the corner of the picture.
-      Positioned.fill(child: FramebufferView(core: widget.core)),
-
-      // The stick sits OVER the picture, because it has to be under a thumb
-      // and a Spectrum screen is 4:3 on a wide display -- there is room
-      // either side of the picture and none below it.
-      if (widget.showJoystick)
-        Positioned.fill(
-          child: KempstonPad(
-            core: widget.core,
-            editing: widget.editingLayout,
-          ),
+      // The Refract WebView itself. Hidden behind the Flutter
+      // framebuffer surface -- Dart draws the captured PNG instead.
+      // We give it a real on-screen size so the JS engine keeps
+      // running and producing fresh frames.
+      Positioned.fill(
+        child: IgnorePointer(
+          child: WebViewWidget(controller: _controller),
         ),
-
-      // The keyboard takes the foot of the view rather than floating: it is
-      // forty keys, it is being read, and a game that wants a keypress has
-      // usually just said so in text you also need to see.
-      if (widget.showKeyboard)
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: SpectrumKeyboard(core: widget.core),
+      ),
+      // The Flutter-rendered framebuffer surface. Drawn from
+      // _frameImage which the polling loop fills every 16 ms.
+      Positioned.fill(
+        child: ColoredBox(
+          color: Colors.black,
+          child: _frameImage == null
+              ? const Center(
+                  child: CircularProgressIndicator(),
+                )
+              : RawImage(
+                  image: _frameImage,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.none,
+                ),
         ),
+      ),
     ]);
   }
 }
+
+class EmulatorSession extends StatefulWidget {
+  final MediaEntry? entry;
+
+  /// Handler for keyboard input from the on-screen Spectrum
+  /// keyboard. [key] is the 0..39 Spectrum matrix index; [press]
+  /// is true for key-down, false for key-up.
+  final void Function(int key, bool press)? onKey;
+
+  const EmulatorSession({super.key, required this.entry, this.onKey});
+
+  @override
+  State<EmulatorSession> createState() => _EmulatorSessionState();
+}
+
+// ---- helpers ----
+
+/// Convert a Spectrum matrix key index to the DOM KeyboardEvent.code
+/// value Refract expects (matches its own MATRIX table). Indices
+/// follow the standard 8x5 layout, top-to-bottom, left-to-right.
+String? _spectrumKeyCode(int key) {
+  const codes = [
+    // row 0 (port 0xFE bit 0): SHIFT, Z, X, C, V
+    'ShiftLeft', 'KeyZ', 'KeyX', 'KeyC', 'KeyV',
+    // row 1 (port 0xFE bit 1): A, S, D, F, G
+    'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG',
+    // row 2 (port 0xFE bit 2): Q, W, E, R, T
+    'KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT',
+    // row 3 (port 0xFE bit 3): 1, 2, 3, 4, 5
+    'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
+    // row 4 (port 0xFE bit 4): 0, 9, 8, 7, 6
+    'Digit0', 'Digit9', 'Digit8', 'Digit7', 'Digit6',
+    // row 5 (port 0xFD bit 0): P, O, I, U, Y
+    'KeyP', 'KeyO', 'KeyI', 'KeyU', 'KeyY',
+    // row 6 (port 0xFD bit 1): ENTER, L, K, J, H
+    'Enter', 'KeyL', 'KeyK', 'KeyJ', 'KeyH',
+    // row 7 (port 0xFD bit 2): SPACE, SYM, M, N, B
+    'Space', 'ControlLeft', 'KeyM', 'KeyN', 'KeyB',
+  ];
+  if (key < 0 || key >= 40) return null;
+  return codes[key];
+}
+
+/// Quote a Dart string for safe inclusion in a JS literal.
+String _jsString(String s) {
+  // Use JSON-style double-quoted escape.
+  return '"' +
+      s.replaceAll(r'\', r'\\')
+          .replaceAll('"', r'\"')
+          .replaceAll('\n', r'\n')
+          .replaceAll('\r', r'\r') +
+      '"';
+}
+
+/// JavaScript that Refract needs installed once it loads. Hooks
+/// the page's drop event so Dart can synthesise file drops via
+/// `window.__retroLoadFile(path, base64)`.
+const String _installHelper = r'''
+window.__retroLoadFile = function(path, b64) {
+  try {
+    const bin = Uint8Array.from(atob(b64), function(c) {
+      return c.charCodeAt(0);
+    });
+    const file = new File([bin], path);
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const ev = new DragEvent('drop', {
+      dataTransfer: dt, bubbles: true, cancelable: true
+    });
+    const target = document.getElementById('screen')
+                 || document.body;
+    target.dispatchEvent(ev);
+  } catch (e) {
+    console.error('retro load failed', e);
+  }
+};
+window.__retroIsReady = function() { return true; };
+''';

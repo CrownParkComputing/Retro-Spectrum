@@ -1,4 +1,0 @@
-/home/jon/StudioProjects/Retro-Spectrum/native/emulator_bridge/linux/out/CMakeFiles/emulator_bridge.dir
-/home/jon/StudioProjects/Retro-Spectrum/native/emulator_bridge/linux/out/CMakeFiles/emulator_smoke.dir
-/home/jon/StudioProjects/Retro-Spectrum/native/emulator_bridge/linux/out/CMakeFiles/edit_cache.dir
-/home/jon/StudioProjects/Retro-Spectrum/native/emulator_bridge/linux/out/CMakeFiles/rebuild_cache.dir
