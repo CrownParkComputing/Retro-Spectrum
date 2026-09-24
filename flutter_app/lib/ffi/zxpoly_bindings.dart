@@ -1,10 +1,11 @@
-// speccy_bindings.dart — raw `dart:ffi` typedefs for the C ABI in
-// native/speccy_core/bridge/speccy_bridge.h.
+// zxpoly_bindings.dart — raw `dart:ffi` typedefs for the C ABI in
+// native/zxpoly_bridge/bridge/zxpoly_bridge.h.
 //
 // Functions are int32 returning except setters (void) and
 // `_get_*` accessors. The framebuffer is RGBA8888 (the bridge does the
-// palette->RGB conversion itself, matching SDL2 / Android builds).
-// Dart's `ui.decodeImageFromPixels` accepts RGBA8888 directly on
+// 4-CPU colour-index → RGBA conversion itself, mirroring the JVM-side
+// renderer so the four video RAMs combine into a single 4-bit-per-pixel
+// image). Dart's `ui.decodeImageFromPixels` accepts RGBA8888 directly on
 // little-endian platforms (all three targets).
 
 import 'dart:ffi';
@@ -14,39 +15,45 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
-/// Spectrum machine models — matches the `SPECCY_MODEL_*` macros in
-/// speccy_bridge.h.
-enum SpeccyModel {
+/// Spectrum machine models — matches the ZXPOLY_MODEL_* macros in
+/// zxpoly_bridge.h. (Phase 2 will populate these from the JVM-side
+/// enum; phase 1 keeps the same shape as the old SimpleSpeccy era.)
+enum ZxpolyModel {
   model48k(0),
   model128k(1);
 
-  const SpeccyModel(this.value);
+  const ZxpolyModel(this.value);
   final int value;
 }
 
-/// ROM slots — matches the `SPECCY_ROM_*` macros in speccy_bridge.h.
-/// The ids are pinned to SimpleSpeccy's android.cpp InitRom order;
-/// do not renumber.
-enum SpeccyRom {
+/// ROM slots — matches the ZXPOLY_ROM_* enum in zxpoly_bridge.h.
+/// The ids are pinned to the order zxpoly expects; do not renumber.
+enum ZxpolyRom {
   sos128_0(0),
   sos128_1(1),
   sos48(2),
   service(3),
   dos(4);
 
-  const SpeccyRom(this.value);
+  const ZxpolyRom(this.value);
   final int value;
 }
 
-/// Error codes returned by all `speccy_bridge_*` functions that
+/// Error codes returned by all `zxpoly_bridge_*` functions that
 /// return int32.
-class SpeccyErr {
+class ZxpolyErr {
   static const ok = 0;
   static const errGeneric = -1;
+  static const errNotImpl = -2;   // phase 2 stub
+  static const errBadArg = -3;
+  static const errNoMem = -4;
+  static const errNoFile = -5;
+  static const errBadFile = -6;
+  static const errNoRom = -7;
 }
 
 // ============================================================
-//  Native typedefs (mirrored from speccy_bridge.h)
+//  Native typedefs (mirrored from zxpoly_bridge.h)
 // ============================================================
 
 typedef _C = ffi.Pointer<Utf8>; // const char* (C string)
@@ -93,98 +100,102 @@ typedef _StrHandleDart = ffi.Pointer<Utf8> Function();
 typedef _FbHandleNative = ffi.Pointer<ffi.Uint32> Function(ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>);
 typedef _FbHandleDart = ffi.Pointer<ffi.Uint32> Function(ffi.Pointer<ffi.Int32>, ffi.Pointer<ffi.Int32>);
 
-/// Low-level bindings to libspeccycore.{so,dylib}.
-class SpeccyCoreBindings {
+/// Low-level bindings to libzxpolycore.{so,dylib}.
+class ZxpolyCoreBindings {
   final DynamicLibrary _lib;
 
-  SpeccyCoreBindings._(this._lib);
+  ZxpolyCoreBindings._(this._lib);
 
-  factory SpeccyCoreBindings.load({String? libraryPath}) {
+  factory ZxpolyCoreBindings.load({String? libraryPath}) {
     final DynamicLibrary lib;
     if (Platform.isLinux) {
-      lib = DynamicLibrary.open(libraryPath ?? 'libspeccycore.so');
+      lib = DynamicLibrary.open(libraryPath ?? 'libzxpolycore.so');
     } else if (Platform.isAndroid) {
-      lib = DynamicLibrary.open(libraryPath ?? 'libspeccycore.so');
+      lib = DynamicLibrary.open(libraryPath ?? 'libzxpolycore.so');
     } else if (Platform.isIOS) {
       lib = libraryPath != null
           ? DynamicLibrary.open(libraryPath)
           : DynamicLibrary.process();
     } else {
       throw UnsupportedError(
-          'retro_spectrum: no libspeccycore binding for ${Platform.operatingSystem}');
+          'retro_spectrum: no libzxpolycore binding for ${Platform.operatingSystem}');
     }
-    return SpeccyCoreBindings._(lib);
+    return ZxpolyCoreBindings._(lib);
   }
 
   late final _init = _lib.lookupFunction<_VoidHandleStrStrNative, _VoidHandleStrStrDart>(
-      'speccy_core_init');
+      'zxpoly_bridge_init');
   late final _setRom = _lib.lookupFunction<_VoidHandleIntPtrIntNative, _VoidHandleIntPtrIntDart>(
-      'speccy_core_set_rom');
+      'zxpoly_bridge_set_rom');
   late final _setFont = _lib.lookupFunction<_VoidHandlePtrIntNative, _VoidHandlePtrIntDart>(
-      'speccy_core_set_font');
+      'zxpoly_bridge_set_font');
+  late final _setRecolour = _lib.lookupFunction<_VoidHandleIntNative, _VoidHandleIntDart>(
+      'zxpoly_bridge_set_recolour');
+  late final _getRecolour = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
+      'zxpoly_bridge_get_recolour');
   late final _start = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
-      'speccy_core_start');
+      'zxpoly_bridge_start');
   late final _stop = _lib.lookupFunction<_VoidHandleNative, _VoidHandleDart>(
-      'speccy_core_stop');
+      'zxpoly_bridge_stop');
   late final _isRunning = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
-      'speccy_core_is_running');
+      'zxpoly_bridge_is_running');
   late final _runFrame = _lib.lookupFunction<_StrHandleNative, _StrHandleDart>(
-      'speccy_core_run_frame');
+      'zxpoly_bridge_run_frame');
   late final _setPaused = _lib.lookupFunction<_VoidHandleIntNative, _VoidHandleIntDart>(
-      'speccy_core_set_paused');
+      'zxpoly_bridge_set_paused');
   late final _reset = _lib.lookupFunction<_VoidHandleNative, _VoidHandleDart>(
-      'speccy_core_reset');
+      'zxpoly_bridge_reset');
 
   late final _getFramebuffer = _lib.lookupFunction<_FbHandleNative, _FbHandleDart>(
-      'speccy_core_get_framebuffer');
+      'zxpoly_bridge_get_framebuffer');
   late final _getFrameCounter = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
-      'speccy_core_get_frame_counter');
+      'zxpoly_bridge_frame_counter');
 
   late final _drainAudio = _lib.lookupFunction<_IntHandlePtrIntNative, _IntHandlePtrIntDart>(
-      'speccy_core_drain_audio');
+      'zxpoly_bridge_drain_audio');
   late final _setSampleRate = _lib.lookupFunction<_VoidHandleIntNative, _VoidHandleIntDart>(
-      'speccy_core_set_sample_rate');
+      'zxpoly_bridge_set_sample_rate');
   late final _getAudioLevel = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
-      'speccy_core_get_audio_level');
+      'zxpoly_bridge_audio_level');
 
   late final _keyEvent = _lib.lookupFunction<_VoidHandleIntIntNative, _VoidHandleIntIntDart>(
-      'speccy_core_key_event');
+      'zxpoly_bridge_key_event');
   late final _kempston = _lib.lookupFunction<_VoidHandleIntNative, _VoidHandleIntDart>(
-      'speccy_core_kempston');
+      'zxpoly_bridge_kempston');
 
   late final _fileTypeSupported = _lib.lookupFunction<_IntHandleStrNative, _IntHandleStrDart>(
-      'speccy_core_file_type_supported');
+      'zxpoly_bridge_file_type_supported');
   late final _openFile = _lib.lookupFunction<_IntHandleStrNative, _IntHandleStrDart>(
-      'speccy_core_open_file');
+      'zxpoly_bridge_open_file');
   late final _openData = _lib.lookupFunction<_IntHandleStrPtrIntNative, _IntHandleStrPtrIntDart>(
-      'speccy_core_open_data');
+      'zxpoly_bridge_open_data');
   late final _saveFile = _lib.lookupFunction<_IntHandleStrNative, _IntHandleStrDart>(
-      'speccy_core_save_file');
+      'zxpoly_bridge_save_file');
   late final _tapeState = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
-      'speccy_core_tape_state');
+      'zxpoly_bridge_tape_state');
   late final _tapeToggle = _lib.lookupFunction<_VoidHandleNative, _VoidHandleDart>(
-      'speccy_core_tape_toggle');
+      'zxpoly_bridge_tape_toggle');
   late final _diskChanged = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
-      'speccy_core_disk_changed');
+      'zxpoly_bridge_disk_changed');
 
   late final _saveState = _lib.lookupFunction<_IntHandleStrNative, _IntHandleStrDart>(
-      'speccy_core_save_state');
+      'zxpoly_bridge_save_state');
   late final _loadState = _lib.lookupFunction<_IntHandleStrNative, _IntHandleStrDart>(
-      'speccy_core_load_state');
+      'zxpoly_bridge_load_state');
 
   late final _getOptionInt = _lib.lookupFunction<_IntStrIntNative, _IntStrIntDart>(
-      'speccy_core_get_option_int');
+      'zxpoly_bridge_get_option_int');
   late final _setOptionInt = _lib.lookupFunction<_VoidStrIntNative, _VoidStrIntDart>(
-      'speccy_core_set_option_int');
+      'zxpoly_bridge_set_option_int');
   late final _getOptionBool = _lib.lookupFunction<_IntStrIntNative, _IntStrIntDart>(
-      'speccy_core_get_option_bool');
+      'zxpoly_bridge_get_option_bool');
   late final _setOptionBool = _lib.lookupFunction<_VoidStrIntNative, _VoidStrIntDart>(
-      'speccy_core_set_option_bool');
+      'zxpoly_bridge_set_option_bool');
   late final _storeOptions = _lib.lookupFunction<_VoidHandleNative, _VoidHandleDart>(
-      'speccy_core_store_options');
+      'zxpoly_bridge_store_options');
 
   late final _getFpsX100 = _lib.lookupFunction<_IntHandleNative, _IntHandleDart>(
-      'speccy_core_get_fps_x100');
+      'zxpoly_bridge_get_fps_x100');
 
   // ============================================================
   //  Public Dart wrappers
@@ -201,7 +212,7 @@ class SpeccyCoreBindings {
     }
   }
 
-  void setRom(SpeccyRom rom,
+  void setRom(ZxpolyRom rom,
       ffi.Pointer<ffi.Uint8> data, int size) {
     _setRom(rom.value, data, size);
   }
@@ -209,6 +220,13 @@ class SpeccyCoreBindings {
   void setFont(ffi.Pointer<ffi.Uint8> data, int size) {
     _setFont(data, size);
   }
+
+  /// Auto-recolour: 1 = on (default), 0 = off. Per-game toggle in the UI
+  /// calls this before open_file(). The recolour preprocess runs
+  /// synchronously inside open_file when on; the first presented frame
+  /// is already the full-colour version.
+  void setRecolour(bool enabled) => _setRecolour(enabled ? 1 : 0);
+  bool getRecolour() => _getRecolour() != 0;
 
   int start() => _start();
 

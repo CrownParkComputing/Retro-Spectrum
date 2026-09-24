@@ -18,12 +18,12 @@
 import 'package:flutter/material.dart';
 
 import '../data/spectrum_keys.dart';
-import '../ffi/speccy_core.dart';
+import '../ffi/zxpoly_core.dart';
 
 class SpectrumKeyboard extends StatefulWidget {
   const SpectrumKeyboard({super.key, required this.core});
 
-  final SpeccyCore core;
+  final ZxpolyCore core;
 
   @override
   State<SpectrumKeyboard> createState() => _SpectrumKeyboardState();

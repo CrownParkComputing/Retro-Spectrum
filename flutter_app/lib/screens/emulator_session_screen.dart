@@ -14,7 +14,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 import 'package:retro_spectrum/screens/emulator_screen.dart';
 import 'package:retro_spectrum/theme/spectrum_theme.dart';
 
@@ -25,7 +25,7 @@ import 'package:retro_spectrum/theme/spectrum_theme.dart';
 enum SessionExit { paused, closed }
 
 class EmulatorSessionScreen extends StatefulWidget {
-  final SpeccyCore core;
+  final ZxpolyCore core;
   final String? biosPath;
   final String? gamesFolder;
   final MediaEntry? entry;

@@ -1,5 +1,5 @@
 # Build output
-native/speccy_core/linux/out/
+native/zxpoly_bridge/linux/out/
 build/
 .gradle/
 .idea/

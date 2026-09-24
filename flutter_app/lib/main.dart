@@ -1,4 +1,4 @@
-// main.dart — Retro-Spectrum app entry. Loads the SpeccyCore,
+// main.dart — Retro-Spectrum app entry. Loads the ZxpolyCore,
 // resolves the platform-appropriate profile dir / ROM buffer /
 // save state path, then routes to SetupWizardScreen or
 // WorkbenchScreen based on whether setup is complete. Mirrors
@@ -8,9 +8,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:retro_spectrum/ffi/speccy_bindings.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
-import 'package:retro_spectrum/ffi/speccy_native_paths.dart';
+import 'package:retro_spectrum/ffi/zxpoly_bindings.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_native_paths.dart';
 import 'package:retro_spectrum/screens/setup_wizard_screen.dart';
 import 'package:retro_spectrum/screens/workbench_screen.dart';
 import 'package:retro_spectrum/services/app_log.dart';
@@ -36,7 +36,7 @@ class RetroSpectrumApp extends StatefulWidget {
 
 class _RetroSpectrumAppState extends State<RetroSpectrumApp>
     with WidgetsBindingObserver {
-  SpeccyCore? _core;
+  ZxpolyCore? _core;
   String? _loadError;
   bool? _setupCompleted;
 
@@ -92,9 +92,9 @@ class _RetroSpectrumAppState extends State<RetroSpectrumApp>
 
   Future<void> _loadCore() async {
     try {
-      final libPath = SpeccyNativePaths.resolveLibrary();
-      final bindings = SpeccyCoreBindings.load(libraryPath: libPath);
-      final core = SpeccyCoreBindingsAdapter(bindings);
+      final libPath = ZxpolyNativePaths.resolveLibrary();
+      final bindings = ZxpolyCoreBindings.load(libraryPath: libPath);
+      final core = ZxpolyCoreBindingsAdapter(bindings);
       core.init(
         CorePaths.profileDir,
         CorePaths.resourceDir,
@@ -163,7 +163,7 @@ class _ErrorScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'Failed to load libspeccycore:\n$message',
+            'Failed to load libzxpolycore:\n$message',
             style: const TextStyle(color: Colors.redAccent),
             textAlign: TextAlign.center,
           ),

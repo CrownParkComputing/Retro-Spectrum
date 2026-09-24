@@ -18,7 +18,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/data/category.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 import 'package:retro_spectrum/screens/about_screen.dart';
 import 'package:retro_spectrum/screens/audio_settings_screen.dart';
 import 'package:retro_spectrum/screens/emulator_session_screen.dart';
@@ -33,7 +33,7 @@ import 'package:retro_spectrum/widgets/sidebar.dart';
 import 'package:retro_spectrum/widgets/sidebar_style.dart';
 
 class WorkbenchScreen extends StatefulWidget {
-  final SpeccyCore core;
+  final ZxpolyCore core;
   final VoidCallback? onRerunSetup;
 
   const WorkbenchScreen({super.key, required this.core, this.onRerunSetup});
@@ -72,7 +72,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   /// launches until the user either resumes or discards.
   MediaEntry? _pausedSession;
 
-  /// Snapshot file written by [SpeccyCore.saveState] on Pause. Resolved
+  /// Snapshot file written by [ZxpolyCore.saveState] on Pause. Resolved
   /// from [CorePaths.saveStatePath] so the path is the same on
   /// Android, iOS and Linux. The SMPC state file lives in the same
   /// per-platform app-data dir; this is its sibling.

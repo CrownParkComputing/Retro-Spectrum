@@ -3,7 +3,7 @@
 // A Spectrum game reads a joystick one of several ways, and Kempston is the
 // one that behaves like a joystick rather than like keys: a single byte of
 // direction bits and a fire bit, which is exactly the shape
-// speccy_core_kempston takes. (The alternatives -- Sinclair, cursor, QAOP --
+// zxpoly_bridge_kempston takes. (The alternatives -- Sinclair, cursor, QAOP --
 // are keyboard keys wearing a joystick's name; those are the on-screen
 // keyboard's job, not this widget's.)
 //
@@ -13,7 +13,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/spectrum_keys.dart';
-import '../ffi/speccy_core.dart';
+import '../ffi/zxpoly_core.dart';
 import '../services/app_prefs.dart';
 import 'dpad_view.dart';
 import 'movable_control.dart';
@@ -30,7 +30,7 @@ class KempstonPad extends StatefulWidget {
     this.editing = false,
   });
 
-  final SpeccyCore core;
+  final ZxpolyCore core;
   final JoystickStyle style;
 
   /// Drag mode: the stick and fire button can be moved, and say so.

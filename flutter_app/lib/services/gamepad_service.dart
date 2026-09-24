@@ -9,8 +9,8 @@
 //
 // The bridge exposes:
 //
-//   speccy_core_key_event(int key, int flags)
-//   speccy_core_kempston(int mask)
+//   zxpoly_bridge_key_event(int key, int flags)
+//   zxpoly_bridge_kempston(int mask)
 //
 // where key is the ASCII/matrix code, flags is xPlatform::eKeyFlags
 // (KF_DOWN=1, KF_UP=0, with the shift/ctrl/alt/joystick-mode
@@ -26,13 +26,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:gamepads/gamepads.dart';
 import 'package:retro_spectrum/data/spectrum_keys.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 
 /// Flag values from xPlatform::eKeyFlags on the native side.
 const int _kfDown = 0x01;
 
 class GamepadService extends ChangeNotifier {
-  final SpeccyCore core;
+  final ZxpolyCore core;
   final int port;
 
   StreamSubscription? _sub;
@@ -143,7 +143,7 @@ class GamepadService extends ChangeNotifier {
 }
 
 /// One key press or release from a physical pad, in the core's own terms:
-/// [key] is what speccy_core_key_event takes, [flags] carries KF_DOWN.
+/// [key] is what zxpoly_bridge_key_event takes, [flags] carries KF_DOWN.
 ///
 /// Public because the emulator screen is what forwards these to the core.
 /// While this was private the stream could not be consumed outside this

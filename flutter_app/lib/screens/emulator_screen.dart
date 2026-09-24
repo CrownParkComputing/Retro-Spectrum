@@ -15,7 +15,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:retro_spectrum/data/media_entry.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 import 'package:retro_spectrum/services/app_log.dart';
 import 'package:retro_spectrum/services/game_state_service.dart';
 import 'package:retro_spectrum/services/gamepad_service.dart';
@@ -25,7 +25,7 @@ import 'package:retro_spectrum/widgets/kempston_pad.dart';
 import 'package:retro_spectrum/widgets/spectrum_keyboard.dart';
 
 class EmulatorScreen extends StatefulWidget {
-  final SpeccyCore core;
+  final ZxpolyCore core;
   final String? biosPath;
   final String? gamesFolder;
   final MediaEntry? entry;

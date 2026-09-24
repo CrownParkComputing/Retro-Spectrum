@@ -1,4 +1,4 @@
-// framebuffer_view.dart — Poll SpeccyCoreBindings.getFramebuffer every
+// framebuffer_view.dart — Poll ZxpolyCoreBindings.getFramebuffer every
 // 33 ms and decode the XRGB8888 framebuffer into a ui.Image, drawn
 // via CustomPaint. Ported verbatim from ViceMultiplatform's pattern.
 //
@@ -10,10 +10,10 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 
 class FramebufferView extends StatefulWidget {
-  final SpeccyCore core;
+  final ZxpolyCore core;
   final Duration pollInterval;
   /// Draws the PANEL's redraw rate over the picture.
   ///

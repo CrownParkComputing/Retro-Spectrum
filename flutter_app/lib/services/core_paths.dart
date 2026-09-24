@@ -50,7 +50,7 @@ class CorePaths {
   static bool get isReady => _baseDir.isNotEmpty;
 
   /// Where the core writes `unreal_speccy_portable.xml` + save data.
-  /// Passed to `speccy_core_init` as the profile_dir.
+  /// Passed to `zxpoly_bridge_init` as the profile_dir.
   static String get profileDir => p.join(_baseDir, 'profile');
 
   /// Where the core reads its `rom/` and `font/` resources from.
@@ -58,7 +58,7 @@ class CorePaths {
   /// ships them as Flutter assets.
   static String get resourceDir => p.join(_baseDir, 'resources');
 
-  /// Snapshot file written by `speccy_core_save_state` on Pause.
+  /// Snapshot file written by `zxpoly_bridge_save_state` on Pause.
   /// Lives next to the profile dir under the app's private files dir.
   static String get saveStatePath => p.join(_baseDir, 'snapshots', 'session.sna');
 

@@ -2,7 +2,7 @@
 //
 // The Spectrum has no single medium: a title arrives as a tape (.tap,
 // .tzx), a snapshot (.z80, .sna), a disk (.trd, .scl), or any of those
-// inside a .zip. The core sorts that out itself -- speccy_core_open_file
+// inside a .zip. The core sorts that out itself -- zxpoly_bridge_open_file
 // dispatches on content, and file_type.cpp is where the list really
 // lives -- so this enum exists to label and filter, not to decide.
 
@@ -77,7 +77,7 @@ class MediaEntry {
   /// The filename as the user sees it (e.g. `"Manic Miner.tap"`).
   final String displayName;
 
-  /// Absolute path on the device -- what speccy_core_open_file wants.
+  /// Absolute path on the device -- what zxpoly_bridge_open_file wants.
   final String path;
 
   /// Format derived from the filename extension.

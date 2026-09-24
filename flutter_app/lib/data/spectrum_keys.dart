@@ -10,7 +10,7 @@
 // This replaces a table that had ENTER as 0x0D and CAPS as 0xC1 -- carried
 // over from a Saturn controller map, and codes the engine simply ignores.
 
-/// Flags for speccy_core_key_event, from xPlatform::eKeyFlags.
+/// Flags for zxpoly_bridge_key_event, from xPlatform::eKeyFlags.
 class SpeccyKeyFlags {
   static const int down = 0x01;
   static const int shift = 0x02; // CAPS SHIFT, as a modifier
@@ -30,7 +30,7 @@ class SpeccyKey {
 class SpectrumKeyCap {
   const SpectrumKeyCap(this.code, this.label, {this.wide = false});
 
-  /// What goes to speccy_core_key_event.
+  /// What goes to zxpoly_bridge_key_event.
   final int code;
 
   /// What the player sees on the key.

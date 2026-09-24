@@ -6,10 +6,10 @@
 // engine exposes sound on/off via the option registry).
 
 import 'package:flutter/material.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 
 class AudioSettingsScreen extends StatefulWidget {
-  final SpeccyCore core;
+  final ZxpolyCore core;
   const AudioSettingsScreen({super.key, required this.core});
 
   @override

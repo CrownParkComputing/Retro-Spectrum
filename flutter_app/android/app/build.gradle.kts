@@ -16,15 +16,18 @@ plugins {
 //   2. `key.properties` next to this file -- a checked-out keystore + four
 //      credentials, for local dev where the env vars aren't.
 //
-// applicationId is `app.simplespeccy` so existing SimpleSpeccy installs
-// upgrade in place -- the display name is "Retro-Spectrum" and the Kotlin
-// namespace is `com.crownpark.retro_spectrum` for code consistency, but the
-// Play Store identity is the one inherited from the app this replaces.
+// applicationId is `app.zxpoly` for the engine swap to raydac/zxpoly. The
+// previous build was `app.simplespeccy` so existing SimpleSpeccy installs
+// could upgrade in place; that promise is gone -- zxpoly is a 4-CPU
+// parallel machine, not a single-Z80 Spectrum, and stock games do not
+// drive it unmodified. This is a fresh Play Store listing; the Kotlin
+// namespace stays `com.crownpark.retro_spectrum` for code consistency.
 import java.util.Properties
 
-// Floor for the version code. SimpleSpeccy, the app this one replaces, is
-// live on 83; anything at or below that is rejected at upload.
-val SPECTRUM_VERSION_CODE_BASE = 100
+// Floor for the version code. We start at 1 -- this is a fresh listing
+// under `app.zxpoly`, not an upgrade over SimpleSpeccy. The versionCode
+// pattern matches the rest of the Retro-* family.
+val SPECTRUM_VERSION_CODE_BASE = 1
 
 data class KeystoreConfig(
     val path: String,
@@ -86,17 +89,15 @@ android {
     }
 
     defaultConfig {
-        // Retro-Spectrum is the display name; `app.simplespeccy` is the Play
-        // Store identity it inherits. This app REPLACES SimpleSpeccy, whose
-        // listing has been published under that id since 2026 and is on
-        // version code 83. Shipping under any other applicationId would create
-        // a brand-new listing that existing installs never update to, which is
-        // why the Kotlin namespace (com.crownpark.retro_spectrum, below) and
-        // the applicationId deliberately differ. Play keys on this string and
-        // it can never change again.
-        applicationId = "app.simplespeccy"
+        // `app.zxpoly` is the Play Store identity for the engine swap to
+        // raydac/zxpoly. The previous build was `app.simplespeccy`; that
+        // identity lives on in the SimpleSpeccy listing, which stays
+        // published but is no longer being upgraded by Retro-Spectrum.
+        // The Kotlin namespace stays `com.crownpark.retro_spectrum` for
+        // code consistency with the rest of the Retro-* family.
+        applicationId = "app.zxpoly"
         // 26, the Retro-* family standard. There is no Android core in this
-        // project yet (native/speccy_core/android is empty), so nothing
+        // project yet (native/zxpoly_bridge/android is empty), so nothing
         // constrains this from below -- it is set to match its siblings so
         // the first core built here has the target to hit.
         minSdk = 26
@@ -108,11 +109,9 @@ android {
         // without a line of this project changing. Compliance is a decision,
         // so it is written down.
         targetSdk = 36
-        // SimpleSpeccy published version code 83 and Play never accepts a code
-        // at or below what is already live. The pubspec restarted at 1, so the
-        // build number is lifted clear of the old line rather than colliding
-        // with it - the same pattern Retro-Dosbox uses over its Java
-        // predecessor.
+        // Fresh listing under `app.zxpoly`. The versionCode starts at 1 and
+        // tracks the pubspec; SimpleSpeccy's published line (which was the
+        // reason for SPECTRUM_VERSION_CODE_BASE) is no longer a constraint.
         versionCode = SPECTRUM_VERSION_CODE_BASE + flutter.versionCode
         versionName = flutter.versionName
     }

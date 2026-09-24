@@ -1,15 +1,15 @@
-// speccy_core.dart — abstract `SpeccyCore` interface + concrete
-// `SpeccyCoreBindingsAdapter` implementation. Mirrors Retro-Saturn's
-// `speccy_core.dart` so screens never touch `dart:ffi` directly.
+// zxpoly_core.dart — abstract `ZxpolyCore` interface + concrete
+// `ZxpolyCoreBindingsAdapter` implementation. Mirrors Retro-Saturn's
+// `zxpoly_core.dart` so screens never touch `dart:ffi` directly.
 
 import 'dart:ffi';
 
-import 'speccy_bindings.dart';
+import 'zxpoly_bindings.dart';
 
 /// Abstract interface — everything screens need from the emulator.
-/// Tests provide a `FakeSpeccyCore`; production uses
-/// `SpeccyCoreBindingsAdapter`.
-abstract class SpeccyCore {
+/// Tests provide a `FakeZxpolyCore`; production uses
+/// `ZxpolyCoreBindingsAdapter`.
+abstract class ZxpolyCore {
 
   /// Lifecycle.
   void init(String profileDir, String resourceDir);
@@ -18,8 +18,13 @@ abstract class SpeccyCore {
   void dispose();
 
   // ROM/font
-  void setRom(SpeccyRom rom, Pointer<Uint8> data, int size);
+  void setRom(ZxpolyRom rom, Pointer<Uint8> data, int size);
   void setFont(Pointer<Uint8> data, int size);
+
+  /// Auto-recolour. The whole point of the zxpoly swap. Default on.
+  /// Per-game toggle in the UI calls setRecolour before openFile().
+  void setRecolour(bool enabled);
+  bool get recolour;
 
   // Emulation
   String? runFrame();
@@ -65,15 +70,15 @@ abstract class SpeccyCore {
 }
 
 /// Concrete production implementation backed by `dart:ffi`.
-class SpeccyCoreBindingsAdapter implements SpeccyCore {
-  final SpeccyCoreBindings _bindings;
+class ZxpolyCoreBindingsAdapter implements ZxpolyCore {
+  final ZxpolyCoreBindings _bindings;
 
   /// Whether init() has run. The bridge owns a singleton and hands back no
   /// handle, so this is the only "is it up?" there is -- and the reason the
-  /// adapter used to invent one. See SpeccyCoreBindings.
+  /// adapter used to invent one. See ZxpolyCoreBindings.
   bool _initialised = false;
 
-  SpeccyCoreBindingsAdapter(this._bindings);
+  ZxpolyCoreBindingsAdapter(this._bindings);
 
   @override
   void init(String profileDir, String resourceDir) {
@@ -84,7 +89,7 @@ class SpeccyCoreBindingsAdapter implements SpeccyCore {
   @override
   void start() {
     if (!_initialised) {
-      throw StateError('SpeccyCore.init() was never called');
+      throw StateError('ZxpolyCore.init() was never called');
     }
     _bindings.start();
   }
@@ -96,19 +101,25 @@ class SpeccyCoreBindingsAdapter implements SpeccyCore {
 
   @override
   void dispose() {
-    // Nothing to free: speccy_bridge.h has no destroy, because there is no
+    // Nothing to free: zxpoly_bridge.h has no destroy, because there is no
     // per-instance state to destroy. Stopping is the whole teardown.
     stop();
     _initialised = false;
   }
 
   @override
-  void setRom(SpeccyRom rom, Pointer<Uint8> data, int size) =>
+  void setRom(ZxpolyRom rom, Pointer<Uint8> data, int size) =>
       _bindings.setRom(rom, data, size);
 
   @override
   void setFont(Pointer<Uint8> data, int size) =>
       _bindings.setFont(data, size);
+
+  @override
+  void setRecolour(bool enabled) => _bindings.setRecolour(enabled);
+
+  @override
+  bool get recolour => _bindings.getRecolour();
 
   @override
   String? runFrame() => _bindings.runFrame();

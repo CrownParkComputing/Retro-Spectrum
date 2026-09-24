@@ -4,7 +4,7 @@
 // state: there is no load/save_backup_memory in speccy_bridge.h at
 // all. What the code actually does, though, is useful here -- it snapshots
 // the running machine to a per-title file and restores it on the way back
-// in, through speccy_core_save_state / _load_state. So it keeps the
+// in, through zxpoly_bridge_save_state / _load_state. So it keeps the
 // behaviour and loses the name, which described hardware this machine
 // does not have.
 //
@@ -17,7 +17,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:retro_spectrum/ffi/speccy_core.dart';
+import 'package:retro_spectrum/ffi/zxpoly_core.dart';
 import 'package:retro_spectrum/services/app_log.dart';
 
 class GameStateService {
@@ -58,7 +58,7 @@ class GameStateService {
 
   /// Read the 32 KiB state for a game from disk and feed it to
   /// the emulator. Returns true if a save file existed and was loaded.
-  static Future<bool> loadInto(SpeccyCore core, String titlePath) async {
+  static Future<bool> loadInto(ZxpolyCore core, String titlePath) async {
     // Initialise here rather than relying on a startup call that nobody
     // made: this used to throw "ensureInit() must be awaited" on every
     // single launch, so no state was ever restored and every auto-save
@@ -78,7 +78,7 @@ class GameStateService {
 
   /// Snapshot the emulator's current state to disk for the given game.
   /// Called when leaving the emulator or every N seconds while playing.
-  static Future<void> saveFrom(SpeccyCore core, String titlePath) async {
+  static Future<void> saveFrom(ZxpolyCore core, String titlePath) async {
     await ensureInit();
     final f = fileFor(titlePath);
     final tmp = File('${f.path}.save.tmp');
@@ -103,7 +103,7 @@ class GameStateService {
   static Timer? _autoSaveTimer;
   static String? _autoSavePath;
 
-  static void startAutoSave(SpeccyCore core, String titlePath,
+  static void startAutoSave(ZxpolyCore core, String titlePath,
       {Duration interval = const Duration(seconds: 60)}) {
     _autoSavePath = titlePath;
     _autoSaveTimer?.cancel();
