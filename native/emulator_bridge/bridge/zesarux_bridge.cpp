@@ -276,21 +276,16 @@ int launch_zesarux() {
         return ZXPOLY_ERR_GENERIC;
     }
 
-    // Drain the ZRCP socket so unsolicited server messages don't
-    // pile up; we send commands and read replies synchronously.
-    std::thread([s = s.zrcp_sock]() {
-        char buf[1024];
-        for (;;) {
-            ssize_t n = ::read(s, buf, sizeof buf);
-            if (n <= 0) break;
-        }
-        ::close(s);
-    }).detach();
-
     // ZRCP readiness check: get-memory-pages is harmless and just
     // returns the memory map. The first line of the response is
     // "OK. ..."; if the server is alive we get OK, if not we get
     // ERROR or a timeout.
+    //
+    // We deliberately do NOT spawn a background drain thread here --
+    // doing so creates a race where the drain reads the response
+    // before zrcp_send can, causing every subsequent command to
+    // timeout. The bridge owns the socket; all reads happen from
+    // zrcp_send under a per-call timeout.
     std::string reply;
     if (zrcp_send("get-memory-pages", &reply, 5000) < 0) {
         die("ZRCP handshake failed: " + reply);
