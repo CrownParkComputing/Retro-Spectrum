@@ -9,9 +9,13 @@ set(BINARY_NAME "retro_spectrum")
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
 set(APPLICATION_ID "com.crownpark.retro_spectrum")
 
+# No native core library anymore -- the engine is Refract
+# running in a WebView. The legacy CMake flag is kept so external
+# tooling that probes this variable still sees a path (pointed at a
+# placeholder file that the build never actually links).
 set(SPECCY_CORE_LIBRARY
   "${CMAKE_CURRENT_SOURCE_DIR}/../../native/emulator_bridge/linux/out/libemulator_bridge.so"
-  CACHE FILEPATH "Path to the ZX Spectrum shared core")
+  CACHE FILEPATH "Path to the ZX Spectrum shared core (legacy)")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
