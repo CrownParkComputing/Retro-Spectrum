@@ -280,28 +280,51 @@ int JniLoader::create_motherboard(int sample_rate) {
 #if ZXPOLY_HAS_JNI
     if (!jvm_) return ZXPOLY_ERR_GENERIC;
     JNIEnv *env = static_cast<JNIEnv *>(env_);
+    if (env->ExceptionCheck()) env->ExceptionClear();  // wipe stale exceptions
 
-    // BorderWidth.UNIVERSAL -> static field of type BorderWidth
+    // BorderWidth.FULL -> static field of type BorderWidth.
+    // The enum values are FULL / SHORT / NONE. The bridge used to
+    // ask for "UNIVERSAL", which the JVM does not have; the lookup
+    // returned null, the JVM threw NoSuchFieldError, and the very
+    // next JNI call (GetStaticObjectField with a null field ID)
+    // segfaulted the JVM. Use the real value name, and check each
+    // lookup before using it.
     jclass bw_cls = local_find_class(env,
         "com/igormaznitsa/zxpoly/components/video/BorderWidth");
     if (!bw_cls) return ZXPOLY_ERR_GENERIC;
-    jfieldID bw_universal = env->GetStaticFieldID(bw_cls, "UNIVERSAL",
+    jfieldID bw_field = env->GetStaticFieldID(bw_cls, "FULL",
         "Lcom/igormaznitsa/zxpoly/components/video/BorderWidth;");
-    jobject borderWidth = env->GetStaticObjectField(bw_cls, bw_universal);
+    if (env->ExceptionCheck()) { check_exception("BorderWidth.FULL"); env->ExceptionClear(); }
+    if (!bw_field) {
+        last_error_ = "BorderWidth.FULL field not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jobject borderWidth = bw_field ? env->GetStaticObjectField(bw_cls, bw_field) : nullptr;
 
-    // VolumeProfile.NORMAL
+    // VolumeProfile.LINEAR
     jclass vp_cls = local_find_class(env,
         "com/igormaznitsa/zxpoly/components/sound/VolumeProfile");
-    jfieldID vp_normal = env->GetStaticFieldID(vp_cls, "NORMAL",
+    jfieldID vp_field = env->GetStaticFieldID(vp_cls, "LINEAR",
         "Lcom/igormaznitsa/zxpoly/components/sound/VolumeProfile;");
-    jobject volumeProfile = env->GetStaticObjectField(vp_cls, vp_normal);
+    if (env->ExceptionCheck()) { check_exception("VolumeProfile.LINEAR"); env->ExceptionClear(); }
+    if (!vp_field) {
+        last_error_ = "VolumeProfile.LINEAR field not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jobject volumeProfile = vp_field ? env->GetStaticObjectField(vp_cls, vp_field) : nullptr;
 
-    // TimingProfile.NTSC_48_OR_128_K
+    // TimingProfile.SPECTRUM128 -- 128K Spectrum timing, what ZX-Poly
+    // mode needs (ZXPOLY board mode with 128K memory map).
     jclass tp_cls = local_find_class(env,
-        "com/igormaznitsa/zxpoly/components/timing/TimingProfile");
-    jfieldID tp_ntsc = env->GetStaticFieldID(tp_cls, "NTSC_48_OR_128_K",
-        "Lcom/igormaznitsa/zxpoly/components/timing/TimingProfile;");
-    jobject timingProfile = env->GetStaticObjectField(tp_cls, tp_ntsc);
+        "com/igormaznitsa/zxpoly/components/video/timings/TimingProfile");
+    jfieldID tp_field = env->GetStaticFieldID(tp_cls, "SPECTRUM128",
+        "Lcom/igormaznitsa/zxpoly/components/video/timings/TimingProfile;");
+    if (env->ExceptionCheck()) { check_exception("TimingProfile.SPECTRUM128"); env->ExceptionClear(); }
+    if (!tp_field) {
+        last_error_ = "TimingProfile.SPECTRUM128 field not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jobject timingProfile = tp_field ? env->GetStaticObjectField(tp_cls, tp_field) : nullptr;
 
     // ROM: prefer ZXSPECTRUM_ROM env var, then
     // ~/games/spectrum/roms/zxspectrum128.rom, then sos48.rom.
@@ -366,37 +389,74 @@ int JniLoader::create_motherboard(int sample_rate) {
                       "sos48.rom";
     }
 
-    // Bounds(0,0,0,0)
-    jclass bounds_cls = local_find_class(env, "java/awt/Rectangle");
-    jmethodID bounds_ctor = env->GetMethodID(bounds_cls, "<init>", "(IIII)V");
-    jobject bounds = env->NewObject(bounds_cls, bounds_ctor, 0, 0, 0, 0);
+    // Bounds() -- no-arg constructor; the (Integer, Integer, int, int)
+    // form takes Integers for x/y and ints for w/h, but for the
+    // "no virtual keyboard window" case the no-arg constructor is
+    // simpler and Motherboard treats null x/y as "not positioned".
+    jclass bounds_cls = local_find_class(env,
+        "com/igormaznitsa/zxpoly/Bounds");
+    if (!bounds_cls) {
+        last_error_ = "Bounds class not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jmethodID bounds_ctor = env->GetMethodID(bounds_cls, "<init>", "()V");
+    if (!bounds_ctor) {
+        last_error_ = "Bounds.<init>() not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jobject bounds = env->NewObject(bounds_cls, bounds_ctor);
 
     // BoardMode.ZXPOLY
     jclass bm_cls = local_find_class(env,
         "com/igormaznitsa/zxpoly/components/BoardMode");
-    jfieldID bm_zxpoly = env->GetStaticFieldID(bm_cls, "ZXPOLY",
+    jfieldID bm_field = env->GetStaticFieldID(bm_cls, "ZXPOLY",
         "Lcom/igormaznitsa/zxpoly/components/BoardMode;");
-    jobject boardMode = env->GetStaticObjectField(bm_cls, bm_zxpoly);
+    if (env->ExceptionCheck()) { check_exception("BoardMode.ZXPOLY"); env->ExceptionClear(); }
+    if (!bm_field) {
+        last_error_ = "BoardMode.ZXPOLY field not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jobject boardMode = bm_field ? env->GetStaticObjectField(bm_cls, bm_field) : nullptr;
 
-    // VirtualKeyboardDecoration.NONE
+    // VirtualKeyboardDecoration -- package-private constructor, takes
+    // a keyboard layout id and loads the PNG + properties from the
+    // classpath. Motherboard passes this through to VideoController,
+    // which requires it to be non-null. Use "ambroclean" as the
+    // default -- it's the smallest of the bundled layouts.
     jclass vkd_cls = local_find_class(env,
         "com/igormaznitsa/zxpoly/components/video/VirtualKeyboardDecoration");
-    jfieldID vkd_none = env->GetStaticFieldID(vkd_cls, "NONE",
-        "Lcom/igormaznitsa/zxpoly/components/video/VirtualKeyboardDecoration;");
-    jobject vkd = env->GetStaticObjectField(vkd_cls, vkd_none);
+    if (!vkd_cls) {
+        last_error_ = "VirtualKeyboardDecoration class not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jmethodID vkd_ctor = env->GetMethodID(vkd_cls, "<init>",
+        "(Ljava/lang/String;)V");
+    if (!vkd_ctor) {
+        last_error_ = "VirtualKeyboardDecoration ctor not found";
+        return ZXPOLY_ERR_GENERIC;
+    }
+    jstring vkd_id = env->NewStringUTF("ambroclean");
+    jobject vkd = env->NewObject(vkd_cls, vkd_ctor, vkd_id);
+    if (env->ExceptionCheck()) {
+        check_exception("VirtualKeyboardDecoration.<init>");
+        env->ExceptionClear();
+        vkd = nullptr;
+    }
+    env->DeleteLocalRef(vkd_id);
 
     // Motherboard ctor: 15 args.
     //   (Lcom/.../BorderWidth;Lcom/.../VolumeProfile;
     //    Lcom/.../TimingProfile;Lcom/.../RomData;
-    //    Ljava/awt/Rectangle;Lcom/.../BoardMode;
+    //    Lcom/igormaznitsa/zxpoly/Bounds;     <-- not java/awt/Rectangle
+    //    Lcom/.../BoardMode;
     //    ZZZZZZLcom/.../VirtualKeyboardDecoration;ZZ)V
     jclass mb_cls = static_cast<jclass>(cls_motherboard_);
     jmethodID mb_ctor = env->GetMethodID(mb_cls, "<init>",
         "(Lcom/igormaznitsa/zxpoly/components/video/BorderWidth;"
         "Lcom/igormaznitsa/zxpoly/components/sound/VolumeProfile;"
-        "Lcom/igormaznitsa/zxpoly/components/timing/TimingProfile;"
+        "Lcom/igormaznitsa/zxpoly/components/video/timings/TimingProfile;"
         "Lcom/igormaznitsa/zxpoly/components/RomData;"
-        "Ljava/awt/Rectangle;"
+        "Lcom/igormaznitsa/zxpoly/Bounds;"
         "Lcom/igormaznitsa/zxpoly/components/BoardMode;"
         "ZZZZZZ"
         "Lcom/igormaznitsa/zxpoly/components/video/VirtualKeyboardDecoration;"
@@ -452,8 +512,18 @@ int JniLoader::create_motherboard(int sample_rate) {
     jclass beeper_cls = local_find_class(env,
         "com/igormaznitsa/zxpoly/components/sound/Beeper");
     if (beeper_cls) {
+        // getSoundPort is actually on the IBeeper interface, not on
+        // Beeper directly. The lookup below would fail with a
+        // NoSuchMethodError, which (without exception clearing)
+        // would crash the next JNI call. The audio path is not
+        // needed for the demo; clear any exception and move on.
         m.beeper_getSoundPort = env->GetMethodID(beeper_cls, "getSoundPort",
             "()Ljava/util/Optional;");
+        if (env->ExceptionCheck()) {
+            check_exception("Beeper.getSoundPort (not on Beeper)");
+            env->ExceptionClear();
+            m.beeper_getSoundPort = nullptr;
+        }
         env->DeleteLocalRef(beeper_cls);
     }
 
@@ -483,8 +553,8 @@ int JniLoader::create_motherboard(int sample_rate) {
     // (We use the per-instance trick below in key_event().)
     keyboard_lines_field_ = keyboardLines;
 
-    jclass km_cls = static_cast<jclass>(cls_kempston_mouse_);
-    jfieldID kempstonSignals = env->GetFieldID(km_cls, "kempstonSignals", "I");
+    jclass kb_cls_for_kempston = static_cast<jclass>(cls_keyboard_);
+    jfieldID kempstonSignals = env->GetFieldID(kb_cls_for_kempston, "kempstonSignals", "I");
     kempston_signals_field_ = kempstonSignals;
 
     if (env->ExceptionCheck()) {
@@ -503,7 +573,6 @@ int JniLoader::create_motherboard(int sample_rate) {
     if (beeper_cls) env->DeleteLocalRef(beeper_cls);
     env->DeleteLocalRef(bounds_cls);
     env->DeleteLocalRef(kb_cls);
-    env->DeleteLocalRef(km_cls);
 
     ready_.store(true);
     return ZXPOLY_OK;
@@ -518,6 +587,7 @@ int JniLoader::open_file(const char *path) {
     if (!jvm_ || !motherboard_) return ZXPOLY_ERR_GENERIC;
 #if ZXPOLY_HAS_JNI
     JNIEnv *env = static_cast<JNIEnv *>(env_);
+    if (env->ExceptionCheck()) env->ExceptionClear();
     auto &m = methods();
 
     // Dispatch on extension.
@@ -545,21 +615,26 @@ int JniLoader::open_file(const char *path) {
         env->DeleteLocalRef(tc_src);
 
         jclass tp_cls = local_find_class(env, kTimingProfileClass);
-        jfieldID tp_ntsc = env->GetStaticFieldID(tp_cls, "NTSC_48_OR_128_K",
-            "Lcom/igormaznitsa/zxpoly/components/timing/TimingProfile;");
-        jobject tp = env->GetStaticObjectField(tp_cls, tp_ntsc);
+        // TimingProfile lives at
+        // com.igormaznitsa.zxpoly.components.video.timings.TimingProfile
+        // -- the .timings sub-package. NTSC_48_OR_128_K does not exist;
+        // SPECTRUM128 is the right value.
+        jfieldID tp_field = env->GetStaticFieldID(tp_cls, "SPECTRUM128",
+            "Lcom/igormaznitsa/zxpoly/components/video/timings/TimingProfile;");
+        if (env->ExceptionCheck()) { check_exception("TimingProfile.SPECTRUM128"); env->ExceptionClear(); }
+        jobject tp = tp_field ? env->GetStaticObjectField(tp_cls, tp_field) : nullptr;
 
         jclass tf_cls = static_cast<jclass>(cls_tape_factory_);
         jmethodID makeSource = env->GetStaticMethodID(tf_cls, "makeSource",
             "(Lcom/igormaznitsa/zxpoly/components/tapereader/TapeContext;"
-            "Lcom/igormaznitsa/zxpoly/components/timing/TimingProfile;"
+            "Lcom/igormaznitsa/zxpoly/components/video/timings/TimingProfile;"
             "Ljava/io/File;)Lcom/igormaznitsa/zxpoly/components/tapereader/TapeSource;");
+        if (env->ExceptionCheck()) { check_exception("TapeSourceFactory.makeSource"); env->ExceptionClear(); }
         if (!makeSource) {
             env->DeleteLocalRef(tc);
             env->DeleteLocalRef(tc_cls);
-            env->DeleteLocalRef(tp_cls);
-            env->DeleteLocalRef(tp);
-            return check_exception("TapeSourceFactory.makeSource");
+            env->DeleteLocalRef(tp_cls); env->DeleteLocalRef(tp);
+            return ZXPOLY_ERR_GENERIC;
         }
         jclass file_cls = local_find_class(env, "java/io/File");
         jmethodID file_ctor = env->GetMethodID(file_cls, "<init>",
@@ -585,12 +660,24 @@ int JniLoader::open_file(const char *path) {
         jclass kb_cls = static_cast<jclass>(cls_keyboard_);
         jfieldID tap_field = env->GetFieldID(kb_cls, "tap",
             "Ljava/util/concurrent/atomic/AtomicReference;");
+        if (env->ExceptionCheck()) { check_exception("Keyboard.tap"); env->ExceptionClear(); }
+        if (!tap_field) {
+            env->DeleteLocalRef(tape);
+            env->DeleteLocalRef(tc); env->DeleteLocalRef(tc_cls);
+            env->DeleteLocalRef(tp_cls); env->DeleteLocalRef(tp);
+            env->DeleteLocalRef(file_cls); env->DeleteLocalRef(file_obj);
+            return ZXPOLY_ERR_GENERIC;
+        }
         jobject tap_atomic = env->GetObjectField(
             static_cast<jobject>(motherboard_), tap_field);
         jclass ar_cls = local_find_class(env, "java/util/concurrent/atomic/AtomicReference");
-        jmethodID ar_set = env->GetMethodID(ar_cls, "set",
-            "(Ljava/lang/Object;)V");
-        env->CallVoidMethod(tap_atomic, ar_set, tape);
+        if (env->ExceptionCheck()) { check_exception("AtomicReference"); env->ExceptionClear(); }
+        jmethodID ar_set = ar_cls ? env->GetMethodID(ar_cls, "set",
+            "(Ljava/lang/Object;)V") : nullptr;
+        if (env->ExceptionCheck()) { check_exception("AtomicReference.set"); env->ExceptionClear(); }
+        if (tap_atomic && ar_set && tape) {
+            env->CallVoidMethod(tap_atomic, ar_set, tape);
+        }
 
         // Auto-recolour preprocess happens here in phase 2.3.
         if (recolour_.load()) {
@@ -633,6 +720,7 @@ const char *JniLoader::step_frame(FrameBuffer *out_frame,
     if (!motherboard_) return kPending;
 
     JNIEnv *env = static_cast<JNIEnv *>(env_);
+    if (env->ExceptionCheck()) env->ExceptionClear();
     auto &m = methods();
 
     // ZX-Poly mode is 69888 t-states per frame. We don't need fine
@@ -925,6 +1013,7 @@ int JniLoader::recolour_preprocess() {
     if (!recolour_.load()) return ZXPOLY_OK;   // toggle off -> no-op
 
     JNIEnv *env = static_cast<JNIEnv *>(env_);
+    if (env->ExceptionCheck()) env->ExceptionClear();
 
     // The ZX-Poly mode renders the same screen data on all 4 parallel
     // CPUs in lockstep, so each module's video RAM needs the same
