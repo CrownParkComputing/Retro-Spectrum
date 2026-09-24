@@ -33,6 +33,16 @@ import '../data/media_entry.dart';
 import '../services/app_log.dart';
 import '../services/saf_bridge.dart';
 
+/// Asset path of the bundled Refract emulator page. `loadFlutterAsset`
+/// throws on Android for files larger than ~1 MB, so we read the
+/// bytes once and pass them through `loadHtmlString` instead.
+const String _refractAssetPath = 'assets/refract.html';
+
+Future<String> _loadRefractHtml() async {
+  final data = await rootBundle.loadString(_refractAssetPath);
+  return data;
+}
+
 /// Holds the live state for the WebView-backed emulator session.
 class _EmulatorSessionState extends State<EmulatorSession> {
   late final WebViewController _controller;
@@ -55,36 +65,40 @@ class _EmulatorSessionState extends State<EmulatorSession> {
       ..addJavaScriptChannel(
         'RefractBridge',
         onMessageReceived: (JavaScriptMessage msg) {
-          // Refract's HTML doesn't expose an API for the host
-          // application to inject files. We inject a small JS
-          // shim (in assets/refract.html) that calls this channel
-          // when the user "drops" a file -- which Dart triggers
-          // when the user picks a game.
           AppLog.log('refract: ${msg.message}');
         },
       )
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (url) async {
-          _ready = true;
-          // Install our file-injection helper once Refract is loaded.
-          await _controller.runJavaScript(_installHelper);
-          // Start the framebuffer polling loop.
-          _frameTimer = Timer.periodic(
-            const Duration(milliseconds: 16),
-            (_) => _captureFrame(),
-          );
-          // If the user already picked a game, load it now.
-          final entry = widget.entry;
-          if (entry != null && File(entry.path).existsSync()) {
-            _loadFile(entry.path);
-          }
-        },
-        onWebResourceError: (err) {
-          _error = true;
-          _errorMessage = err.description;
-        },
-      ))
-      ..loadFlutterAsset('assets/refract.html');
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (url) async {
+            _ready = true;
+            await _controller.runJavaScript(_installHelper);
+            _frameTimer = Timer.periodic(
+              const Duration(milliseconds: 16),
+              (_) => _captureFrame(),
+            );
+            final entry = widget.entry;
+            if (entry != null && File(entry.path).existsSync()) {
+              _loadFile(entry.path);
+            }
+          },
+          onWebResourceError: (err) {
+            _error = true;
+            _errorMessage = err.description;
+          },
+        ),
+      );
+    // Load Refract's HTML directly via rootBundle.loadString and
+    // hand it to the WebView via loadHtmlString. This avoids
+    // loadFlutterAsset which throws on Android for files larger than
+    // ~1 MB (Refract's bundled page is 1.7 MB). Kick off from a
+    // separate async helper because initState itself can't await.
+    _bootRefract();
+  }
+
+  Future<void> _bootRefract() async {
+    final html = await _loadRefractHtml();
+    await _controller.loadHtmlString(html);
   }
 
   @override

@@ -37,3 +37,8 @@ flutter:
     # and the Android build has no other way to get them: it is compiled
     # -DUSE_EXTERN_RESOURCES, so the core never reads them off disk.
     - assets/roms/
+    # The ZX-Spectrum / ZX-Spectrum-Next emulator page (Refract by
+    # Software Amusements). 1.7 MB of inlined Z80N + NextReg JS that the
+    # WebView loads in-process. We load it from rootBundle.loadString
+    # (loadFlutterAsset throws on Android for files larger than ~1 MB).
+    - assets/refract.html
