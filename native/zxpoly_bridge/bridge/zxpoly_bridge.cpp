@@ -19,6 +19,7 @@
 #include "../jni/jni_loader.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <vector>
 
@@ -192,6 +193,26 @@ extern "C" const uint32_t *zxpoly_bridge_get_framebuffer(int32_t *out_w,
 
 extern "C" int64_t zxpoly_bridge_frame_counter(void) {
     return state().frame_counter.load();
+}
+
+extern "C" int zxpoly_bridge_get_fps_x100(void) {
+    // The Dart UI calls this on every frame; keep it cheap. The
+    // bridge tracks frames-per-second over a sliding 60-frame window
+    // and returns fps * 100 so the caller can show one decimal.
+    const int window = 60;
+    auto counter = state().frame_counter.load();
+    if (counter < window) return 0;
+    static std::atomic<int64_t> last_count{0};
+    static std::atomic<int64_t> last_ns{0};
+    int64_t now = std::chrono::steady_clock::now().time_since_epoch().count();
+    int64_t prev_count = last_count.exchange(counter);
+    int64_t prev_ns     = last_ns.exchange(now);
+    if (prev_ns == 0 || now == prev_ns) return 0;
+    int64_t dt_ns = now - prev_ns;
+    if (dt_ns <= 0) return 0;
+    int64_t dframes = counter - prev_count;
+    // fps * 100 = dframes / dt_seconds * 100 = dframes * 1e11 / dt_ns
+    return static_cast<int>((dframes * 100000000000LL) / dt_ns);
 }
 
 /* ---- Audio ----------------------------------------------------------- */

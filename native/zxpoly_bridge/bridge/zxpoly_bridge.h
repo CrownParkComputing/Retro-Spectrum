@@ -92,6 +92,12 @@ const char *zxpoly_bridge_last_error(void);
  * error string the Dart side surfaces to the user. */
 const char *zxpoly_bridge_run_frame(void);
 int  zxpoly_bridge_reset(void);
+
+/* FPS scaled by 100 (i.e. 5000 == 50.00 fps). The Dart side reads
+ * this on every emulator tick to log the running rate; the bridge
+ * tracks the counter and computes a moving average over the last
+ * second. Returns 0 when the bridge is not running yet. */
+int  zxpoly_bridge_get_fps_x100(void);
 int  zxpoly_bridge_set_paused(int paused);
 int  zxpoly_bridge_is_running(void);
 
