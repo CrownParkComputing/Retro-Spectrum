@@ -123,7 +123,18 @@ class _EmulatorScreenState extends State<EmulatorScreen> {
       AppLog.log('snapshot auto-save started (60s interval)');
     }
 
-    AppLog.log('emulator running @ ${widget.core.fpsX100 / 100.0}fps');
+    // The fps lookup is wrapped in try/catch because a missing
+    // symbol on the bridge (an older build, a wrong ABI) used to take
+    // down the entire frame loop with an unhandled Dart exception --
+    // 'spinning not loading the tap', since the exception fires
+    // after openFile() has already started the loader. Treat a
+    // failure to read fps as 'we don't know yet' and move on.
+    try {
+      final fps = widget.core.fpsX100;
+      AppLog.log('emulator running @ ${fps / 100.0}fps');
+    } catch (e) {
+      AppLog.log('fps lookup failed: $e');
+    }
   }
 
   @override
