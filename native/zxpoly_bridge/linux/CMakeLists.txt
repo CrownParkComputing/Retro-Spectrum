@@ -20,6 +20,41 @@ endif()
 
 find_package(Threads REQUIRED)
 
+# When the host has a JDK in PATH, expose its include directory to
+# the C++ preprocessor so the JNI bridge (which gates every method
+# on `__has_include(<jni.h>)`) actually lights up. On hosts without
+# a JDK this is a no-op -- the gate stays closed and every method
+# returns ZXPOLY_ERR_NOTIMPL, which is the documented behaviour.
+if(DEFINED ENV{JAVA_HOME})
+    set(_zxpoly_jdk_include "$ENV{JAVA_HOME}/include")
+    if(EXISTS "${_zxpoly_jdk_include}/jni.h")
+        message(STATUS
+            "JNI headers from JAVA_HOME=$ENV{JAVA_HOME} -> bridge will "
+            "load the JVM at runtime")
+        # jni_md.h lives under a platform subdir; on Linux that's
+        # include/linux/jni_md.h. Include both so the preprocessor
+        # finds the architecture-specific typedefs jni.h pulls in.
+        include_directories(SYSTEM "${_zxpoly_jdk_include}")
+        if(EXISTS "${_zxpoly_jdk_include}/linux/jni_md.h")
+            include_directories(SYSTEM "${_zxpoly_jdk_include}/linux")
+        endif()
+        # libjvm.so exposes JNI_CreateJavaVM and friends; link the
+        # bridge against it so dlopen succeeds at runtime. On Android
+        # libjvm lives in libnativehelper -- the Android CMakeLists
+        # points the linker at it instead.
+        find_library(_zxpoly_libjvm
+            NAMES jvm
+            PATHS "$ENV{JAVA_HOME}/lib" "$ENV{JAVA_HOME}/lib/server"
+            NO_DEFAULT_PATH REQUIRED)
+        message(STATUS
+            "Linking bridge against libjvm at ${_zxpoly_libjvm}")
+    else()
+        message(STATUS
+            "JAVA_HOME is set but jni.h is missing at "
+            "${_zxpoly_jdk_include}; bridge stays in stub mode")
+    endif()
+endif()
+
 # ---- Bridge sources ---------------------------------------------------
 # Phase 1 stub. See bridge/zxpoly_bridge.h for the full surface and
 # native/zxpoly_bridge/README.md for the phase 2 plan.
@@ -35,9 +70,16 @@ add_library(zxpoly_core SHARED
 set_target_properties(zxpoly_core PROPERTIES OUTPUT_NAME zxpolycore)
 
 target_include_directories(zxpoly_core PUBLIC ../bridge ../jni)
+if(_zxpoly_libjvm)
+    target_link_libraries(zxpoly_core PRIVATE ${_zxpoly_libjvm})
+endif()
 target_link_libraries(zxpoly_core PRIVATE Threads::Threads)
 
-# Same on Android.
+# A standalone smoke test that drives the bridge directly (no
+# Flutter). Lets you confirm the JNI bridge is alive end-to-end
+# before the GUI is involved.
+add_executable(zxpoly_smoke zxpoly_smoke.cpp)
+target_link_libraries(zxpoly_smoke PRIVATE Threads::Threads)
 
 # Engine integration (phase 2):
 #

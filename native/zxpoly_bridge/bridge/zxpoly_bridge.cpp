@@ -131,6 +131,10 @@ extern "C" int zxpoly_bridge_recolour_now(void) {
     return jvm().recolour_preprocess();
 }
 
+extern "C" const char *zxpoly_bridge_last_error(void) {
+    return jvm().last_error().c_str();
+}
+
 /* ---- Frame / emulation ----------------------------------------------- */
 
 extern "C" const char *zxpoly_bridge_run_frame(void) {

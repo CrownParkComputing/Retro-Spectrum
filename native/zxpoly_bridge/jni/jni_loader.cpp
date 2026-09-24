@@ -113,9 +113,6 @@ struct CachedMethodIDs {
     jmethodID module_makeCopyOfZxMemPage = nullptr;
 
     jmethodID video_makeCopyOfVideoBuffer = nullptr;
-    jmethodID motherboard_findIoDevice = nullptr;
-
-    jmethodID video_makeCopyOfVideoBuffer = nullptr;
 
     jmethodID beeper_getSoundPort = nullptr;
     jmethodID romData_read_file = nullptr;
@@ -140,14 +137,42 @@ int JniLoader::start(const JvmLaunchOptions &opts) {
 #if ZXPOLY_HAS_JNI
     JavaVMOption jvm_opts[6];
     int n = 0;
-    char xms[32], xmx[32], cp[4096];
+    char xms[32], xmx[32], cp[4096], jh[1024];
     std::snprintf(xms, sizeof(xms), "-Xms%dm", opts.heap_mb / 2);
     std::snprintf(xmx, sizeof(xmx), "-Xmx%dm", opts.heap_mb);
     std::snprintf(cp,  sizeof(cp),  "-Djava.class.path=%s",
                   opts.class_path.c_str());
+    // Tell the JVM where its own lib/ lives. When invoked from JNI
+    // the JVM tries to derive this from the location of libjvm.so in
+    // our own process's address space and gets it wrong on hosts that
+    // symlink the JDK install path -- which is what every distro
+    // package does. Setting java.home to JAVA_HOME explicitly fixes
+    // the early-init NULL dereference.
+    const char *jh_env = std::getenv("JAVA_HOME");
+    if (jh_env && *jh_env) {
+        std::snprintf(jh, sizeof(jh), "-Djava.home=%s", jh_env);
+    }
     jvm_opts[n].optionString = xms; n++;
     jvm_opts[n].optionString = xmx; n++;
     jvm_opts[n].optionString = cp;  n++;
+    if (jh_env && *jh_env) {
+        jvm_opts[n].optionString = jh; n++;
+    }
+    // Some host/JDK combinations SIGSEGV in the server VM during early
+    // init. Force the client VM; the ZX-Poly emulator is not hot-path
+    // sensitive, and the client VM is the right choice for an in-
+    // process desktop classpath anyway.
+    jvm_opts[n].optionString = const_cast<char *>("-client");
+    n++;
+    // Some host/JDK combinations SIGSEGV in the G1 GC threads during
+    // early init. Serial GC is fine for an in-process desktop
+    // classpath the size of one ZX-Spectrum emulator.
+    jvm_opts[n].optionString = const_cast<char *>("-XX:+UseSerialGC");
+    n++;
+    // Skip JVM-side JIT entirely; the ZX-Poly emulator is already
+    // small and our render path doesn't need hot-loop optimisation.
+    jvm_opts[n].optionString = const_cast<char *>("-Xint");
+    n++;
     if (opts.verbose) {
         jvm_opts[n].optionString = const_cast<char *>("-verbose:class,jni");
         n++;
@@ -156,10 +181,14 @@ int JniLoader::start(const JvmLaunchOptions &opts) {
         JNI_VERSION_1_8, n, jvm_opts,
         /* ignore unrecognized */ JNI_TRUE
     };
+    std::fprintf(stderr, "[jni] launching JVM (heap %d MB, %d opts)\n",
+                 opts.heap_mb, n);
 
     JavaVM *jvm = nullptr;
     JNIEnv *env = nullptr;
-    jint rc = JNI_CreateJavaVM(&jvm, &env, &args);
+    void *env_holder = nullptr;
+    jint rc = JNI_CreateJavaVM(&jvm, &env_holder, &args);
+    env = static_cast<JNIEnv *>(env_holder);
     if (rc != JNI_OK || !jvm) {
         last_error_ = "JNI_CreateJavaVM failed";
         return ZXPOLY_ERR_GENERIC;
@@ -187,7 +216,16 @@ int JniLoader::start(const JvmLaunchOptions &opts) {
     if (!cls_motherboard_ || !cls_video_ || !cls_audio_format_ ||
         !cls_snd_buffer_ || !cls_keyboard_ || !cls_kempston_mouse_ ||
         !cls_tape_factory_ || !cls_rom_data_) {
-        last_error_ = "one or more zxpoly classes did not resolve";
+        std::string missing;
+        if (!cls_motherboard_)    missing += " Motherboard";
+        if (!cls_video_)          missing += " VideoController";
+        if (!cls_audio_format_)   missing += " AudioFormat";
+        if (!cls_snd_buffer_)     missing += " SndBufferContainer";
+        if (!cls_keyboard_)       missing += " KeyboardKempstonAndTapeIn";
+        if (!cls_kempston_mouse_) missing += " KempstonMouse";
+        if (!cls_tape_factory_)   missing += " TapeSourceFactory";
+        if (!cls_rom_data_)       missing += " RomData";
+        last_error_ = "zxpoly classes did not resolve:" + missing;
         stop();
         return ZXPOLY_ERR_GENERIC;
     }
@@ -287,6 +325,7 @@ int JniLoader::create_motherboard(int sample_rate) {
 
     jobject rom = nullptr;
     jstring rom_src = nullptr;
+    jbyteArray empty_rom = nullptr;
     for (const char *path : rom_candidates) {
         if (!path || !*path) continue;
         // Probe before handing the path to the JVM -- a missing file
@@ -319,10 +358,9 @@ int JniLoader::create_motherboard(int sample_rate) {
         // No usable ROM file -- fall back to a 16K zero so the JVM at
         // least constructs. The user will see a black screen and a
         // JNI-side log message saying which path we tried.
-        jbyteArray empty_rom = env->NewByteArray(16384);
+        empty_rom = env->NewByteArray(16384);
         rom_src = env->NewStringUTF("placeholder://retro-spectrum (no ROM found)");
         rom = env->NewObject(rd_cls, rd_ctor, rom_src, empty_rom);
-        env->DeleteLocalRef(empty_rom);
         last_error_ = "no ROM found: tried ZXSPECTRUM_ROM env, "
                       "/home/jon/games/spectrum/roms/zxspectrum128.rom, "
                       "sos48.rom";

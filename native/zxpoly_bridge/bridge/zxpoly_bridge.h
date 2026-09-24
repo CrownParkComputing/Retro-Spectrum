@@ -82,6 +82,10 @@ int  zxpoly_bridge_get_recolour(void);
  * ZXPOLY_ERR_NOTIMPL. */
 int  zxpoly_bridge_recolour_now(void);
 
+/* Last error message, or empty string. Stable across calls; the
+ * underlying buffer is owned by the bridge. */
+const char *zxpoly_bridge_last_error(void);
+
 /* ---- Frame / emulation ----------------------------------------------- */
 
 /* Advance one frame. Returns null on success, otherwise a static
